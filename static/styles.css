@@ -573,3 +573,137 @@ body {
 
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
+
+/* Mobile Menu Button */
+.mobile-toggle-btn {
+    display: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-color);
+    color: #fff;
+    font-size: 1.3rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+
+/* ==================================================== */
+/* RESPONSIVE BREAKPOINTS (Mobile & Tablet Optimization) */
+/* ==================================================== */
+
+@media (max-width: 960px) {
+    .app-container {
+        flex-direction: column;
+    }
+
+    .mobile-toggle-btn {
+        display: block;
+    }
+
+    .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        padding: 1rem;
+    }
+
+    .brand {
+        margin-bottom: 0;
+        justify-content: space-between;
+    }
+
+    .nav-menu {
+        display: none;
+        margin-top: 1rem;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .sidebar.mobile-open .nav-menu {
+        display: flex;
+    }
+
+    .sidebar.mobile-open .server-status {
+        display: flex;
+        margin-top: 1rem;
+    }
+
+    .server-status {
+        display: none;
+    }
+
+    .main-content {
+        padding: 1.25rem;
+    }
+
+    .top-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .simulator-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .phone-frame {
+        width: 100%;
+        max-width: 420px;
+        margin: 0 auto;
+        height: 520px;
+    }
+
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .span-2 {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 600px) {
+    .header-title h1 {
+        font-size: 1.3rem;
+    }
+
+    .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+
+    .kpi-card {
+        padding: 1rem;
+    }
+
+    .kpi-value {
+        font-size: 1.6rem;
+    }
+
+    .search-box input {
+        width: 100%;
+    }
+
+    .table-toolbar {
+        flex-direction: column;
+    }
+
+    .header-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .header-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+

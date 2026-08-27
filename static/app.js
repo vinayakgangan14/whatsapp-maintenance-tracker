@@ -1,5 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
+    // MOBILE NAVIGATION TOGGLE
+    // ----------------------------------------------------
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.querySelector('.sidebar');
+
+    if (mobileMenuBtn && sidebar) {
+        mobileMenuBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('mobile-open');
+        });
+    }
+
+    // ----------------------------------------------------
     // TAB NAVIGATION
     // ----------------------------------------------------
     const navItems = document.querySelectorAll('.nav-item');
@@ -15,6 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
             item.classList.add('active');
             const targetElement = document.getElementById(targetTab);
             if (targetElement) targetElement.classList.add('active');
+
+            // Close mobile menu when a tab is selected
+            if (sidebar) sidebar.classList.remove('mobile-open');
         });
     });
 
