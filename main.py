@@ -222,11 +222,11 @@ async def upload_credentials(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail="Invalid JSON credentials file")
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
     index_path = BASE_DIR / "static" / "index.html"
     if index_path.exists():
-        return FileResponse(str(index_path), media_type="text/html")
+        return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
     return HTMLResponse("<h2>WhatsApp Maintenance Tracker Backend Running</h2>")
 
 if __name__ == "__main__":
