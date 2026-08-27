@@ -1,33 +1,16 @@
 {
   "name": "whatsapp-maintenance-tracker",
   "version": "1.0.0",
-  "description": "WhatsApp Maintenance & Breakdown Tracking Agent with Google Sheets & Excel sync, 24/7 cloud readiness.",
+  "description": "WhatsApp Maintenance Tracking Agent",
   "main": "server.js",
-  "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server.js"
   },
-  "keywords": [
-    "whatsapp",
-    "maintenance",
-    "breakdown-tracker",
-    "mttr",
-    "google-sheets",
-    "excel"
-  ],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
-    "axios": "^1.7.9",
+    "@whiskeysockets/baileys": "^6.7.18",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "exceljs": "^4.4.0",
     "express": "^4.21.2",
-    "googleapis": "^144.0.0",
     "pino": "^9.6.0",
-    "qrcode": "^1.5.4",
-    "sqlite3": "^5.1.7",
-    "@whiskeysockets/baileys": "^6.7.18"
+    "qrcode": "^1.5.4"
   }
 }

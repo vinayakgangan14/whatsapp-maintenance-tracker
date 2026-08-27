@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const baileysService = require('./baileysService');
@@ -14,86 +13,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/static', express.static(path.join(__dirname, 'static')));
 
-// Database setup
-const dbPath = path.join(__dirname, 'maintenance_tracker.db');
-const db = new sqlite3.Database(dbPath);
-
-db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS breakdowns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_number TEXT UNIQUE NOT NULL,
-            department TEXT NOT NULL DEFAULT 'General',
-            sender_phone TEXT,
-            sender_name TEXT,
-            equipment_id TEXT NOT NULL,
-            issue_description TEXT NOT NULL,
-            start_time TEXT NOT NULL,
-            end_time TEXT,
-            status TEXT NOT NULL DEFAULT 'OPEN',
-            duration_minutes INTEGER DEFAULT 0,
-            resolution_notes TEXT,
-            technician TEXT,
-            synced_to_sheets INTEGER DEFAULT 0,
-            created_at TEXT NOT NULL
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS maintenance_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_number TEXT UNIQUE NOT NULL,
-            department TEXT NOT NULL DEFAULT 'General',
-            sender_phone TEXT,
-            sender_name TEXT,
-            equipment_id TEXT NOT NULL,
-            activity_description TEXT NOT NULL,
-            technician TEXT,
-            performed_at TEXT NOT NULL,
-            synced_to_sheets INTEGER DEFAULT 0
-        )
-    `);
-
-    db.run(`
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    `);
-});
-
-// Execute python parser script for incoming messages
-function processMessageWithPython(text, phone, name) {
+// Execute python helper script
+function runPythonCode(pythonCode) {
     return new Promise((resolve) => {
-        const pythonScript = path.join(__dirname, 'parser.py');
-        const code = `
-import parser, database, json
-database.init_db()
-reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(text)}, ${JSON.stringify(phone)}, ${JSON.stringify(name)})
-print(json.dumps({"reply": reply, "action": action, "details": details}))
-        `;
-        
         try {
             const pyExec = fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe')) 
                 ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
                 : 'python';
 
-            const process = spawn(pyExec, ['-c', code]);
+            const proc = spawn(pyExec, ['-c', pythonCode]);
             let output = '';
 
-            process.stdout.on('data', (data) => { output += data.toString(); });
-            process.stderr.on('data', (data) => { console.error('PyErr:', data.toString()); });
+            proc.stdout.on('data', (data) => { output += data.toString(); });
+            proc.stderr.on('data', (data) => { console.error('PyErr:', data.toString()); });
 
-            process.on('close', () => {
+            proc.on('close', () => {
                 try {
-                    const parsed = JSON.parse(output.trim());
-                    resolve(parsed.reply);
+                    resolve(JSON.parse(output.trim()));
                 } catch (e) {
-                    resolve("✅ Report received and recorded in system database.");
+                    resolve({ raw: output.trim() });
                 }
             });
         } catch (e) {
-            resolve("✅ Report received and recorded.");
+            resolve({ error: String(e) });
         }
     });
 }
@@ -106,47 +48,33 @@ app.get('/api/baileys/status', (req, res) => {
 });
 
 app.post('/api/baileys/start', (req, res) => {
-    baileysService.startBaileysEngine((text, phone, name) => {
-        return processMessageWithPython(text, phone, name);
+    baileysService.startBaileysEngine(async (text, phone, name) => {
+        const code = `
+import parser, database, json
+database.init_db()
+reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(text)}, ${JSON.stringify(phone)}, ${JSON.stringify(name)})
+print(json.dumps({"reply": reply}))
+        `;
+        const resObj = await runPythonCode(code);
+        return resObj.reply || "✅ Report received and logged.";
     });
     res.json({ message: "Baileys engine starting..." });
 });
 
-// Proxy existing endpoints to Python backend or DB queries
-app.get('/api/stats', (req, res) => {
-    db.get("SELECT COUNT(*) as total_bd, SUM(CASE WHEN status != 'RESOLVED' THEN 1 ELSE 0 END) as open_bd, SUM(CASE WHEN status = 'RESOLVED' THEN 1 ELSE 0 END) as resolved_bd, SUM(CASE WHEN status = 'RESOLVED' THEN duration_minutes ELSE 0 END) as total_downtime FROM breakdowns", [], (err, row) => {
-        const totalBd = row ? row.total_bd : 0;
-        const openBd = row ? row.open_bd : 0;
-        const resolvedBd = row ? row.resolved_bd : 0;
-        const sumDowntime = row ? (row.total_downtime || 0) : 0;
-        const mttr = resolvedBd > 0 ? Math.round((sumDowntime / resolvedBd) * 10) / 10 : 0;
-
-        db.get("SELECT COUNT(*) as total_pm FROM maintenance_logs", [], (err2, row2) => {
-            const totalPm = row2 ? row2.total_pm : 0;
-            res.json({
-                total_breakdowns: totalBd,
-                open_breakdowns: openBd,
-                resolved_breakdowns: resolvedBd,
-                total_downtime_minutes: sumDowntime,
-                total_downtime_hours: Math.round((sumDowntime / 60) * 100) / 100,
-                mttr_minutes: mttr,
-                total_pm_logs: totalPm,
-                department_distribution: { "Production": totalBd }
-            });
-        });
-    });
+// Proxy stats, breakdowns, maintenance to Python Database engine
+app.get('/api/stats', async (req, res) => {
+    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_statistics()))');
+    res.json(data.raw ? {} : data);
 });
 
-app.get('/api/breakdowns', (req, res) => {
-    db.all("SELECT * FROM breakdowns ORDER BY id DESC LIMIT 100", [], (err, rows) => {
-        res.json(rows || []);
-    });
+app.get('/api/breakdowns', async (req, res) => {
+    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_breakdowns()))');
+    res.json(Array.isArray(data) ? data : []);
 });
 
-app.get('/api/maintenance', (req, res) => {
-    db.all("SELECT * FROM maintenance_logs ORDER BY id DESC LIMIT 100", [], (err, rows) => {
-        res.json(rows || []);
-    });
+app.get('/api/maintenance', async (req, res) => {
+    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_maintenance()))');
+    res.json(Array.isArray(data) ? data : []);
 });
 
 app.post('/api/simulator/send', async (req, res) => {
@@ -155,8 +83,14 @@ app.post('/api/simulator/send', async (req, res) => {
     if (department && !fullMsg.includes('[') && !fullMsg.toLowerCase().includes('dept')) {
         fullMsg = `[${department}] ${fullMsg}`;
     }
-    const reply = await processMessageWithPython(fullMsg, '+1234567890', sender_name || 'Simulator User');
-    res.json({ reply, action_type: 'SIMULATOR' });
+    const code = `
+import parser, database, json
+database.init_db()
+reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(fullMsg)}, "+1234567890", ${JSON.stringify(sender_name || 'Simulator User')})
+print(json.dumps({"reply": reply, "action_type": action, "stats": database.get_statistics()}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data.reply ? data : { reply: "✅ Logged in system." });
 });
 
 app.get('/api/export/excel', (req, res) => {
@@ -178,36 +112,33 @@ app.get('/api/export/excel', (req, res) => {
     }
 });
 
-app.get('/api/settings', (req, res) => {
-    db.all("SELECT * FROM settings", [], (err, rows) => {
-        const settings = {};
-        if (rows) rows.forEach(r => settings[r.key] = r.value);
-        res.json({
-            spreadsheet_id: settings.GOOGLE_SPREADSHEET_ID || "",
-            sheet_name: settings.GOOGLE_SHEET_NAME || "Maintenance_Logs",
-            has_google_credentials: fs.existsSync(path.join(__dirname, 'service_account.json'))
-        });
-    });
-});
-
-app.post('/api/settings', (req, res) => {
-    const { spreadsheet_id, sheet_name } = req.body;
-    if (spreadsheet_id !== undefined) {
-        db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('GOOGLE_SPREADSHEET_ID', ?)", [spreadsheet_id]);
-    }
-    if (sheet_name !== undefined) {
-        db.run("INSERT OR REPLACE INTO settings (key, value) VALUES ('GOOGLE_SHEET_NAME', ?)", [sheet_name]);
-    }
-    res.json({ message: "Settings saved" });
+app.get('/api/settings', async (req, res) => {
+    const data = await runPythonCode(`
+import database, json, os, config
+database.init_db()
+print(json.dumps({
+    "spreadsheet_id": database.get_setting("GOOGLE_SPREADSHEET_ID") or config.DEFAULT_CONFIG["GOOGLE_SPREADSHEET_ID"],
+    "sheet_name": database.get_setting("GOOGLE_SHEET_NAME") or config.DEFAULT_CONFIG["GOOGLE_SHEET_NAME"],
+    "has_google_credentials": os.path.exists(config.CREDENTIALS_FILE)
+}))
+    `);
+    res.json(data.raw ? {} : data);
 });
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
-// Auto start Baileys engine on launch
-baileysService.startBaileysEngine((text, phone, name) => {
-    return processMessageWithPython(text, phone, name);
+// Auto-start Baileys engine on startup
+baileysService.startBaileysEngine(async (text, phone, name) => {
+    const code = `
+import parser, database, json
+database.init_db()
+reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(text)}, ${JSON.stringify(phone)}, ${JSON.stringify(name)})
+print(json.dumps({"reply": reply}))
+    `;
+    const resObj = await runPythonCode(code);
+    return resObj.reply || "✅ Report received and logged.";
 });
 
 app.listen(PORT, () => {
