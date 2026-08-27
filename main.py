@@ -81,8 +81,28 @@ async def receive_meta_webhook(request: Request):
                 whatsapp_engine.send_meta_whatsapp_message(from_phone, reply_text)
     except Exception as e:
         print(f"Meta webhook processing error: {e}")
-    
-    return {"status": "EVENT_RECEIVED"}
+        return {"status": "EVENT_RECEIVED"}
+
+# ---------------------------------------------------------
+# TWILIO WHATSAPP WEBHOOK ENDPOINT (NO META ACCOUNT NEEDED)
+# ---------------------------------------------------------
+@app.post("/api/twilio/webhook")
+async def receive_twilio_webhook(request: Request):
+    """Twilio WhatsApp incoming message handler (No Meta Account or OTP required)."""
+    form_data = await request.form()
+    message_text = form_data.get("Body", "")
+    from_phone = form_data.get("From", "").replace("whatsapp:", "")
+    sender_name = form_data.get("ProfileName", "WhatsApp User")
+
+    reply_text, _ = whatsapp_engine.process_incoming_message(
+        message_text=message_text,
+        sender_phone=from_phone,
+        sender_name=sender_name
+    )
+
+    # Return TwiML XML response for instant WhatsApp reply via Twilio
+    twiml_response = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{reply_text}</Message></Response>'
+    return Response(content=twiml_response, media_type="application/xml")
 
 # ---------------------------------------------------------
 # WEB DASHBOARD & SIMULATOR ENDPOINTS

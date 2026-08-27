@@ -29,6 +29,9 @@
                 <button class="nav-item active" data-tab="tab-overview">
                     <span class="nav-icon">📊</span> Overview & MTTR
                 </button>
+                <button class="nav-item" data-tab="tab-qr">
+                    <span class="nav-icon">📱</span> WhatsApp QR Connect (Free)
+                </button>
                 <button class="nav-item" data-tab="tab-breakdowns">
                     <span class="nav-icon">🚨</span> Breakdown Logs
                 </button>
@@ -133,6 +136,38 @@
                         <div class="chart-container">
                             <canvas id="chartRatio"></canvas>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: WHATSAPP QR CONNECT (100% FREE) -->
+            <section id="tab-qr" class="tab-pane">
+                <div class="glass-card" style="max-width: 680px; margin: 0 auto; text-align: center;">
+                    <h2>📱 Scan WhatsApp QR Code (100% FREE)</h2>
+                    <p class="text-muted" style="margin-top: 0.5rem;">Connect any standard WhatsApp or WhatsApp Business phone number without Meta API fees, OTPs, or credit cards.</p>
+
+                    <div style="margin: 1.5rem 0; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: var(--radius-md); display: inline-block;">
+                        <div id="qr-container" style="min-height: 240px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+                            <div id="qr-loading-text" class="text-muted">Click below to generate WhatsApp Web QR code...</div>
+                            <img id="qr-code-img" style="display: none; width: 240px; height: 240px; border-radius: 12px; border: 4px solid #fff; margin: 0 auto;">
+                        </div>
+                        <div id="qr-status-badge" class="badge" style="margin-top: 1rem; font-size: 0.9rem; padding: 6px 16px; background: rgba(255,255,255,0.1); color: #fff;">
+                            Status: Disconnected
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <button class="btn btn-emerald" id="btn-start-qr">Generate / Reset QR Code</button>
+                    </div>
+
+                    <div class="glass-card" style="text-align: left; background: rgba(255,255,255,0.02);">
+                        <h4 style="margin-bottom: 0.75rem;">📋 How to Connect in 30 Seconds:</h4>
+                        <ol style="margin-left: 1.25rem; line-height: 1.8; color: var(--text-muted); font-size: 0.9rem;">
+                            <li>Open <b>WhatsApp</b> on your phone.</li>
+                            <li>Tap <b>Menu</b> (⋮ or ⚙️ Settings) -> <b>Linked Devices</b>.</li>
+                            <li>Tap <b>Link a Device</b>.</li>
+                            <li>Scan the QR code above! Your cloud agent will connect instantly.</li>
+                        </ol>
                     </div>
                 </div>
             </section>

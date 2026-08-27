@@ -404,6 +404,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ----------------------------------------------------
+    // BAILEYS WHATSAPP QR CODE CONTROLLER
+    // ----------------------------------------------------
+    async function checkBaileysQR() {
+        try {
+            const res = await fetch('/api/baileys/status');
+            const data = await res.json();
+            const loadingText = document.getElementById('qr-loading-text');
+            const qrImg = document.getElementById('qr-code-img');
+            const badge = document.getElementById('qr-status-badge');
+
+            if (!loadingText || !qrImg || !badge) return;
+
+            if (data.status === 'CONNECTED') {
+                loadingText.style.display = 'none';
+                qrImg.style.display = 'none';
+                badge.innerHTML = '🟢 <b>CONNECTED TO WHATSAPP 24/7</b>';
+                badge.className = 'badge 247-badge';
+            } else if (data.qrCode) {
+                loadingText.style.display = 'none';
+                qrImg.style.display = 'block';
+                qrImg.src = data.qrCode;
+                badge.innerHTML = '⚡ <b>SCAN QR CODE WITH WHATSAPP ON YOUR PHONE</b>';
+                badge.className = 'badge text-warning';
+            } else {
+                loadingText.innerText = 'Click "Generate / Reset QR Code" below to display WhatsApp QR code...';
+                loadingText.style.display = 'block';
+                qrImg.style.display = 'none';
+                badge.innerText = 'Status: ' + (data.status || 'Disconnected');
+            }
+        } catch (e) {
+            console.error('Error fetching Baileys status:', e);
+        }
+    }
+
+    const startQrBtn = document.getElementById('btn-start-qr');
+    if (startQrBtn) {
+        startQrBtn.addEventListener('click', () => {
+            fetch('/api/baileys/start', { method: 'POST' }).then(() => checkBaileysQR());
+        });
+    }
+
+    setInterval(checkBaileysQR, 3000);
+    checkBaileysQR();
+
     function refreshAll() {
         loadStats();
         loadBreakdowns();
