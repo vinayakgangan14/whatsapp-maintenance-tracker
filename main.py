@@ -224,9 +224,9 @@ async def upload_credentials(file: UploadFile = File(...)):
 
 @app.get("/")
 async def root():
-    index_path = STATIC_DIR / "index.html"
+    index_path = BASE_DIR / "static" / "index.html"
     if index_path.exists():
-        return FileResponse(index_path)
+        return FileResponse(str(index_path), media_type="text/html")
     return HTMLResponse("<h2>WhatsApp Maintenance Tracker Backend Running</h2>")
 
 if __name__ == "__main__":
