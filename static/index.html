@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Maintenance & Breakdown Agent</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">🛠️</div>
+                <div class="brand-text">
+                    <h2>MaintAgent</h2>
+                    <span class="badge 247-badge">WhatsApp 24/7 Sync</span>
+                </div>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="tab-overview">
+                    <span class="nav-icon">📊</span> Overview & MTTR
+                </button>
+                <button class="nav-item" data-tab="tab-breakdowns">
+                    <span class="nav-icon">🚨</span> Breakdown Logs
+                </button>
+                <button class="nav-item" data-tab="tab-pm">
+                    <span class="nav-icon">⚙️</span> Preventive Maint
+                </button>
+
+                <button class="nav-item" data-tab="tab-simulator">
+                    <span class="nav-icon">💬</span> WhatsApp Simulator
+                </button>
+                <button class="nav-item" data-tab="tab-sheets">
+                    <span class="nav-icon">📗</span> Sheets & Excel Sync
+                </button>
+                <button class="nav-item" data-tab="tab-settings">
+                    <span class="nav-icon">⚙️</span> Integration Settings
+                </button>
+            </nav>
+
+            <div class="server-status">
+                <div class="status-indicator online"></div>
+                <div class="status-text">
+                    <strong>Cloud Agent Active</strong>
+                    <small>Listening for WhatsApp Webhooks</small>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Navbar -->
+            <header class="top-header">
+                <div class="header-title">
+                    <h1 id="page-title">Maintenance Analytics & Breakdown Command</h1>
+                    <p class="subtitle">Multi-department WhatsApp breakdown reporting and Google Sheets logging system</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-emerald" id="btn-quick-log">
+                        <span>+ Report Breakdown</span>
+                    </button>
+                    <a href="/api/export/excel" class="btn btn-outline" target="_blank">
+                        <span>📥 Export Excel (.xlsx)</span>
+                    </a>
+                </div>
+            </header>
+
+            <!-- TAB 1: OVERVIEW & MTTR -->
+            <section id="tab-overview" class="tab-pane active">
+                <!-- KPI Grid -->
+                <div class="kpi-grid">
+                    <div class="kpi-card open-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Active Open Breakdowns</span>
+                            <span class="kpi-icon">🚨</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-open-bd">0</div>
+                        <div class="kpi-footer text-danger">Requires Maintenance Attention</div>
+                    </div>
+
+                    <div class="kpi-card resolved-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Resolved Incidents</span>
+                            <span class="kpi-icon">✅</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-resolved-bd">0</div>
+                        <div class="kpi-footer text-success">Total Repaired Tickets</div>
+                    </div>
+
+                    <div class="kpi-card downtime-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Total Equipment Downtime</span>
+                            <span class="kpi-icon">⏳</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-downtime">0 <small style="font-size: 1rem">hrs</small></div>
+                        <div class="kpi-footer text-warning" id="kpi-downtime-mins">0 total minutes</div>
+                    </div>
+
+                    <div class="kpi-card mttr-card">
+                        <div class="kpi-header">
+                            <span class="kpi-title">MTTR (Mean Time To Repair)</span>
+                            <span class="kpi-icon">⏱️</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-mttr">0 <small style="font-size: 1rem">mins</small></div>
+                        <div class="kpi-footer text-info">Avg repair turnaround time</div>
+                    </div>
+                </div>
+
+                <!-- Analytics Charts Row -->
+                <div class="charts-grid">
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <h3>Department Breakdown Distribution</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chartDepartment"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="glass-card">
+                        <div class="card-header">
+                            <h3>Breakdown vs Resolution Ratio</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chartRatio"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 2: BREAKDOWN LOGS TABLE -->
+            <section id="tab-breakdowns" class="tab-pane">
+                <div class="glass-card">
+                    <div class="table-toolbar">
+                        <div class="search-box">
+                            <input type="text" id="table-search" placeholder="Search equipment, ticket, issue, or department...">
+                        </div>
+                        <div class="filter-group">
+                            <select id="status-filter">
+                                <option value="ALL">All Statuses</option>
+                                <option value="OPEN">Open Only</option>
+                                <option value="RESOLVED">Resolved Only</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticket #</th>
+                                    <th>Department</th>
+                                    <th>Equipment ID</th>
+                                    <th>Issue Description</th>
+                                    <th>Status</th>
+                                    <th>Start Time</th>
+                                    <th>End Time</th>
+                                    <th>Downtime</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="breakdowns-table-body">
+                                <tr><td colspan="9" class="text-center">Loading breakdowns...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 3: PREVENTIVE MAINTENANCE LOGS -->
+            <section id="tab-pm" class="tab-pane">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h3>Preventive Maintenance Activity Log</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticket #</th>
+                                    <th>Department</th>
+                                    <th>Equipment ID</th>
+                                    <th>Activity Description</th>
+                                    <th>Technician</th>
+                                    <th>Performed At</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pm-table-body">
+                                <tr><td colspan="6" class="text-center">Loading PM records...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 4: WHATSAPP SIMULATOR -->
+            <section id="tab-simulator" class="tab-pane">
+                <div class="simulator-layout">
+                    <div class="phone-frame">
+                        <div class="phone-header">
+                            <div class="phone-avatar">🤖</div>
+                            <div class="phone-contact">
+                                <strong>MaintAgent Bot</strong>
+                                <small>Online 24/7 (Department Central)</small>
+                            </div>
+                        </div>
+
+                        <div class="phone-messages" id="chat-messages">
+                            <div class="msg msg-received">
+                                👋 Welcome! I am your 24/7 WhatsApp Maintenance Agent.<br><br>
+                                Anyone from any department can post breakdown reports or routine maintenance logs here.<br><br>
+                                Try typing:<br>
+                                <code>BREAKDOWN [Production] Press #3 - Hydraulic Oil Leak</code>
+                            </div>
+                        </div>
+
+                        <div class="phone-input-bar">
+                            <input type="text" id="sim-input" placeholder="Type WhatsApp message here...">
+                            <button id="sim-send-btn">Send</button>
+                        </div>
+                    </div>
+
+                    <div class="simulator-sidebar glass-card">
+                        <h3>Department Quick Simulator</h3>
+                        <p class="text-muted">Click a quick template to test WhatsApp agent logic:</p>
+                        
+                        <div class="sim-presets">
+                            <button class="preset-btn" data-msg="BREAKDOWN [Production Line A] CNC Milling Machine #2 - Spindle motor overheating">
+                                🚨 Log CNC Breakdown (Production)
+                            </button>
+                            <button class="preset-btn" data-msg="BREAKDOWN [HVAC & Facilities] Chiller Unit #1 - Water pump pressure low">
+                                🚨 Log Chiller Breakdown (HVAC)
+                            </button>
+                            <button class="preset-btn" data-msg="FIX CNC Milling Machine #2 - Replaced thermal sensor and restarted line">
+                                ✅ Resolve CNC Machine
+                            </button>
+                            <button class="preset-btn" data-msg="MAINT [Utilities] Air Compressor #4 - Monthly filter replacement complete">
+                                🛠️ Log Preventive Maint (Utilities)
+                            </button>
+                            <button class="preset-btn" data-msg="STATUS">
+                                📌 Check Open Breakdown Tickets
+                            </button>
+                            <button class="preset-btn" data-msg="SUMMARY">
+                                📊 View Downtime & MTTR Stats
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 5: SHEETS & EXCEL SYNC -->
+            <section id="tab-sheets" class="tab-pane">
+                <div class="glass-card">
+                    <h3>Google Sheets Live Sync Configuration</h3>
+                    <p class="text-muted">Your WhatsApp tracking agent automatically streams every breakdown and resolution event to a cloud Google Sheet in real-time.</p>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Google Spreadsheet ID</label>
+                            <input type="text" id="cfg-sheet-id" placeholder="e.g. 1BxiMVs0XRra5nFMdACgA_yL8F... (from URL)">
+                            <small class="text-muted">Found in your Google Sheet URL: https://docs.google.com/spreadsheets/d/<b>YOUR_SPREADSHEET_ID</b>/edit</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Sheet / Worksheet Tab Name</label>
+                            <input type="text" id="cfg-sheet-name" value="Maintenance_Logs" placeholder="Maintenance_Logs">
+                        </div>
+
+                        <div class="form-group span-2">
+                            <label>Google Service Account Credentials JSON</label>
+                            <div class="file-drop-zone" id="json-dropzone">
+                                <input type="file" id="json-file-input" accept=".json">
+                                <p id="json-status-text">📄 Drop your Google Service Account <code>service_account.json</code> here or click to browse</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="btn-save-sheets">Save Google Sheet Configuration</button>
+                </div>
+            </section>
+
+            <!-- TAB 6: SETTINGS -->
+            <section id="tab-settings" class="tab-pane">
+                <div class="glass-card">
+                    <h3>Meta WhatsApp Business API Credentials</h3>
+                    <p class="text-muted">Configure Meta Cloud API or Twilio credentials for official 24/7 WhatsApp Webhooks.</p>
+
+                    <div class="form-grid">
+                        <div class="form-group span-2">
+                            <label>Meta WhatsApp Permanent Access Token</label>
+                            <input type="password" id="cfg-meta-token" placeholder="EAAG...">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone Number ID</label>
+                            <input type="text" id="cfg-phone-id" placeholder="109283746554...">
+                        </div>
+                        <div class="form-group">
+                            <label>Webhook Verification Token</label>
+                            <input type="text" id="cfg-verify-token" value="antigravity_verify_123">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="btn-save-meta">Save WhatsApp Settings</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- RESOLVE MODAL -->
+    <div class="modal" id="modal-resolve">
+        <div class="modal-content glass-card">
+            <h3>Resolve Equipment Breakdown</h3>
+            <p id="modal-ticket-info" class="text-muted"></p>
+            <div class="form-group">
+                <label>Resolution Notes & Action Taken</label>
+                <textarea id="modal-resolution" rows="3" placeholder="Describe repair actions, parts replaced..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Technician Name</label>
+                <input type="text" id="modal-tech" placeholder="e.g. John Doe">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btn-close-modal">Cancel</button>
+                <button class="btn btn-emerald" id="btn-confirm-resolve">Mark Resolved & Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
