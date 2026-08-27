@@ -196,28 +196,49 @@ async def export_excel():
     )
 
 # ---------------------------------------------------------
-# BAILEYS QR CODE ENDPOINTS (100% RELIABLE)
+# BAILEYS REAL WHATSAPP WEBSOCKET QR CODE ENDPOINTS
 # ---------------------------------------------------------
-import time
+import subprocess
+import requests as http_req
 
-baileys_state = {
-    "status": "DISCONNECTED",
-    "qrCode": None
-}
+node_baileys_proc = None
+
+def start_node_baileys():
+    global node_baileys_proc
+    if node_baileys_proc is None or node_baileys_proc.poll() is not None:
+        try:
+            node_baileys_proc = subprocess.Popen(
+                ["node", "server.js"],
+                cwd=str(BASE_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            print("[Python] Spawned Node.js Baileys WebSocket engine.")
+        except Exception as e:
+            print("[Python] Could not spawn node server:", e)
 
 @app.get("/api/baileys/status")
 async def get_baileys_status():
-    return baileys_state
+    start_node_baileys()
+    # Try fetching real Baileys QR status from local Node process
+    try:
+        res = http_req.get("http://127.0.0.1:3000/api/baileys/status", timeout=2)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return {"status": "CONNECTING", "qrCode": None}
 
 @app.post("/api/baileys/start")
 async def start_baileys():
-    global baileys_state
-    baileys_state["status"] = "QR_READY"
-    # Generate realistic WhatsApp Web pairing QR token URL
-    timestamp = int(time.time())
-    qr_payload = f"2@maint_agent_session_{timestamp},10000,antigravity_sync"
-    baileys_state["qrCode"] = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={qr_payload}"
-    return {"message": "Baileys engine starting...", "status": baileys_state}
+    start_node_baileys()
+    try:
+        res = http_req.post("http://127.0.0.1:3000/api/baileys/start", timeout=2)
+        if res.status_code == 200:
+            return res.json()
+    except Exception:
+        pass
+    return {"message": "Baileys engine starting...", "status": "CONNECTING"}
 
 # ---------------------------------------------------------
 # SETTINGS & CREDENTIALS ENDPOINTS
