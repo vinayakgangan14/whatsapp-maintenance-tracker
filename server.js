@@ -77,6 +77,49 @@ app.get('/api/maintenance', async (req, res) => {
     res.json(Array.isArray(data) ? data : []);
 });
 
+app.post('/api/breakdowns/log', async (req, res) => {
+    const { department, equipment_id, issue_description, sender_name } = req.body;
+    const code = `
+import database, json, google_sheets
+database.init_db()
+ticket, bd_id = database.log_breakdown(
+    department=${JSON.stringify(department || 'General')},
+    equipment_id=${JSON.stringify(equipment_id)},
+    issue_description=${JSON.stringify(issue_description)},
+    sender_name=${JSON.stringify(sender_name || 'Web Admin')}
+)
+open_bds = database.get_open_breakdowns()
+matching = [b for b in open_bds if b['ticket_number'] == ticket]
+if matching:
+    google_sheets.sync_breakdown_to_sheet(matching[0])
+print(json.dumps({"ticket": ticket, "id": bd_id}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data.ticket ? data : { message: "Logged" });
+});
+
+app.post('/api/breakdowns/resolve', async (req, res) => {
+    const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
+    const code = `
+import database, json, google_sheets
+database.init_db()
+updated, err = database.resolve_breakdown(
+    ticket_number=${JSON.stringify(ticket_number || null)},
+    equipment_id=${JSON.stringify(equipment_id || null)},
+    resolution_notes=${JSON.stringify(resolution_notes || 'Fixed manually via dashboard')},
+    technician=${JSON.stringify(technician || 'Technician')}
+)
+if updated:
+    google_sheets.sync_breakdown_to_sheet(updated)
+print(json.dumps({"updated": updated, "err": err}))
+    `;
+    const data = await runPythonCode(code);
+    if (data.err) {
+        return res.status(400).json({ detail: data.err });
+    }
+    res.json({ message: "Breakdown resolved successfully", record: data.updated });
+});
+
 app.post('/api/simulator/send', async (req, res) => {
     const { message, sender_name, department } = req.body;
     let fullMsg = message || '';
@@ -141,6 +184,13 @@ print(json.dumps({"reply": reply}))
     return resObj.reply || "✅ Report received and logged.";
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
+    // Restore database from Google Sheets on startup if empty
+    try {
+        await runPythonCode('import google_sheets; google_sheets.restore_database_from_sheets()');
+        console.log('[Pure Bot] Startup database restore completed.');
+    } catch (e) {
+        console.error('[Pure Bot] Database restore skipped:', e);
+    }
 });

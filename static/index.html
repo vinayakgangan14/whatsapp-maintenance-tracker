@@ -16,10 +16,10 @@
         <aside class="sidebar">
             <div class="brand">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div class="brand-icon">🛠️</div>
+                    <div class="brand-icon">🤖</div>
                     <div class="brand-text">
-                        <h2>MaintAgent</h2>
-                        <span class="badge 247-badge">WhatsApp 24/7 Sync</span>
+                        <h2>Pure Bot</h2>
+                        <span class="badge 247-badge">Maintenance 24/7</span>
                     </div>
                 </div>
                 <button class="mobile-toggle-btn" id="mobile-menu-btn">☰</button>
@@ -64,7 +64,7 @@
             <!-- Top Navbar -->
             <header class="top-header">
                 <div class="header-title">
-                    <h1 id="page-title">Maintenance Analytics & Breakdown Command</h1>
+                    <h1 id="page-title">Pure Bot for Maintenance and Repair</h1>
                     <p class="subtitle">Multi-department WhatsApp breakdown reporting and Google Sheets logging system</p>
                 </div>
                 <div class="header-actions">
@@ -244,48 +244,51 @@
                         <div class="phone-header">
                             <div class="phone-avatar">🤖</div>
                             <div class="phone-contact">
-                                <strong>MaintAgent Bot</strong>
+                                <strong>Pure Bot for Maintenance and Repair</strong>
                                 <small>Online 24/7 (Department Central)</small>
                             </div>
                         </div>
 
                         <div class="phone-messages" id="chat-messages">
                             <div class="msg msg-received">
-                                👋 Welcome! I am your 24/7 WhatsApp Maintenance Agent.<br><br>
-                                Anyone from any department can post breakdown reports or routine maintenance logs here.<br><br>
-                                Try typing:<br>
-                                <code>BREAKDOWN [Production] Press #3 - Hydraulic Oil Leak</code>
+                                👋 Welcome to <b>Pure Bot for Maintenance and Repair</b>!<br><br>
+                                Simple 1-Touch Commands:<br>
+                                <code>1 Press 3 Oil leak</code> (Report Breakdown)<br>
+                                <code>2 Press 3 Fixed</code> (Report Repair Done)<br>
+                                <code>3 Press 3 Service</code> (Log Service)<br>
+                                <code>4</code> (Check Active)<br>
+                                <code>5</code> (View Stats)
                             </div>
                         </div>
 
                         <div class="phone-input-bar">
-                            <input type="text" id="sim-input" placeholder="Type WhatsApp message here...">
+                            <input type="text" id="sim-input" placeholder="Type WhatsApp message (e.g. 1 Press 3 Leak)...">
                             <button id="sim-send-btn">Send</button>
                         </div>
                     </div>
 
                     <div class="simulator-sidebar glass-card">
-                        <h3>Department Quick Simulator</h3>
-                        <p class="text-muted">Click a quick template to test WhatsApp agent logic:</p>
+                        <h3>1-Touch Quick Simulator</h3>
+                        <p class="text-muted">Click a quick template to test Pure Bot logic:</p>
                         
                         <div class="sim-presets">
-                            <button class="preset-btn" data-msg="BREAKDOWN [Production Line A] CNC Milling Machine #2 - Spindle motor overheating">
-                                🚨 Log CNC Breakdown (Production)
+                            <button class="preset-btn" data-msg="1 Press 3 Spindle motor overheating">
+                                🚨 1 Press 3 Overheating (Report Breakdown)
                             </button>
-                            <button class="preset-btn" data-msg="BREAKDOWN [HVAC & Facilities] Chiller Unit #1 - Water pump pressure low">
-                                🚨 Log Chiller Breakdown (HVAC)
+                            <button class="preset-btn" data-msg="1 Chiller 1 Water pressure low">
+                                🚨 1 Chiller 1 Low Pressure (Report Breakdown)
                             </button>
-                            <button class="preset-btn" data-msg="FIX CNC Milling Machine #2 - Replaced thermal sensor and restarted line">
-                                ✅ Resolve CNC Machine
+                            <button class="preset-btn" data-msg="2 Press 3 Fixed">
+                                ✅ 2 Press 3 Fixed (Report Repaired)
                             </button>
-                            <button class="preset-btn" data-msg="MAINT [Utilities] Air Compressor #4 - Monthly filter replacement complete">
-                                🛠️ Log Preventive Maint (Utilities)
+                            <button class="preset-btn" data-msg="3 Air Compressor Monthly filter service">
+                                🛠️ 3 Compressor Service (Log PM)
                             </button>
-                            <button class="preset-btn" data-msg="STATUS">
-                                📌 Check Open Breakdown Tickets
+                            <button class="preset-btn" data-msg="4">
+                                📌 4 (Check Active Open Tickets)
                             </button>
-                            <button class="preset-btn" data-msg="SUMMARY">
-                                📊 View Downtime & MTTR Stats
+                            <button class="preset-btn" data-msg="5">
+                                📊 5 (View Downtime & MTTR Stats)
                             </button>
                         </div>
                     </div>

@@ -14,8 +14,12 @@ import google_sheets
 import excel_generator
 from config import BASE_DIR, CREDENTIALS_FILE, DEFAULT_CONFIG
 
-# Initialize SQLite tables on startup
+# Initialize SQLite tables on startup and restore entries from Google Sheets
 database.init_db()
+try:
+    google_sheets.restore_database_from_sheets()
+except Exception as e:
+    print("Startup Google Sheets restore skipped:", e)
 
 app = FastAPI(
     title="WhatsApp Maintenance & Breakdown Tracking Agent",
