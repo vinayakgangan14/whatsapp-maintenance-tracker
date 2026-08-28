@@ -389,15 +389,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/api/sync-all', { method: 'POST' });
             const data = await res.json();
-            if (data.synced_breakdowns !== undefined) {
-                statusEl.innerHTML = `✅ <b>Sync complete!</b> ${data.synced_breakdowns} breakdown(s) and ${data.synced_pm} PM log(s) pushed to Google Sheets.` +
-                    (data.errors.length ? `<br>⚠️ ${data.errors.length} error(s): ${data.errors[0]}` : '');
-                statusEl.style.color = data.errors.length ? '#f59e0b' : '#10b981';
+            if (data.error) {
+                statusEl.innerHTML = `⚠️ <b>Sync Error:</b> ${data.error}`;
+                statusEl.style.color = '#ef4444';
+            } else if (data.synced_breakdowns !== undefined) {
+                statusEl.innerHTML = `✅ <b>Sync complete!</b> ${data.synced_breakdowns} breakdown(s) and ${data.synced_pm} PM log(s) synced (${data.new_rows || 0} new rows added to Google Sheets).`;
+                statusEl.style.color = '#10b981';
             } else {
-                statusEl.textContent = '⚠️ Sync attempted — check Render logs for details.';
+                statusEl.textContent = '⚠️ Sync response received.';
             }
         } catch (e) {
-            statusEl.textContent = '❌ Error connecting to server.';
+            statusEl.textContent = '❌ Connection error: ' + (e.message || e);
             statusEl.style.color = '#ef4444';
         }
 

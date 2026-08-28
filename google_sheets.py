@@ -282,3 +282,94 @@ def setup_sheet_headers(spreadsheet_id=None, sheet_name=None):
         return True, "Headers set up successfully."
     except Exception as e:
         return False, str(e)
+
+
+def sync_all_records_batch():
+    """
+    Fast batch sync of ALL breakdowns and PM logs to Google Sheets.
+    Executes in 1 single API call instead of dozens!
+    """
+    service = get_sheets_service()
+    if not service:
+        return False, "Google Sheets credentials missing or invalid."
+
+    sid, sname = _get_spreadsheet_info()
+    if not sid:
+        return False, "Google Spreadsheet ID not configured."
+
+    setup_sheet_headers(sid, sname)
+
+    all_bds = database.get_all_breakdowns(limit=1000)
+    all_pm = database.get_all_maintenance(limit=1000)
+
+    try:
+        # Fetch existing tickets from column A
+        res = service.spreadsheets().values().get(
+            spreadsheetId=sid,
+            range=f"{sname}!A:A"
+        ).execute()
+        existing_tickets = set(r[0] for r in res.get('values', []) if r)
+
+        rows_to_append = []
+        synced_bd = 0
+        synced_pm = 0
+
+        # Add breakdowns that aren't in Sheet yet
+        for bd in reversed(all_bds):
+            t = bd.get('ticket_number', '')
+            if t and t not in existing_tickets:
+                row = [
+                    t,
+                    bd.get('department', 'General'),
+                    bd.get('equipment_id', ''),
+                    bd.get('issue_description', ''),
+                    bd.get('status', 'OPEN'),
+                    (bd.get('start_time') or '')[:19].replace('T', ' '),
+                    (bd.get('end_time') or '')[:19].replace('T', ' '),
+                    bd.get('duration_minutes', 0),
+                    bd.get('resolution_notes', ''),
+                    bd.get('technician', '') or bd.get('sender_name', ''),
+                    (bd.get('created_at') or '')[:19].replace('T', ' ')
+                ]
+                rows_to_append.append(row)
+                synced_bd += 1
+
+        # Add PM logs that aren't in Sheet yet
+        for pm in reversed(all_pm):
+            t = pm.get('ticket_number', '')
+            if t and t not in existing_tickets:
+                row = [
+                    t,
+                    pm.get('department', 'General'),
+                    pm.get('equipment_id', ''),
+                    pm.get('activity_description', ''),
+                    'PM',
+                    (pm.get('performed_at') or '')[:19].replace('T', ' '),
+                    '', 0, '',
+                    pm.get('technician', '') or pm.get('sender_name', ''),
+                    (pm.get('performed_at') or '')[:19].replace('T', ' ')
+                ]
+                rows_to_append.append(row)
+                synced_pm += 1
+
+        if rows_to_append:
+            service.spreadsheets().values().append(
+                spreadsheetId=sid,
+                range=f"{sname}!A:K",
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body={'values': rows_to_append}
+            ).execute()
+
+        # Update synced_to_sheets flag in DB
+        conn = database.get_db_connection()
+        conn.execute("UPDATE breakdowns SET synced_to_sheets = 1")
+        conn.execute("UPDATE maintenance_logs SET synced_to_sheets = 1")
+        conn.commit()
+        conn.close()
+
+        msg = f"Synced {len(rows_to_append)} new record(s) to Google Sheets."
+        return True, {"synced_breakdowns": len(all_bds), "synced_pm": len(all_pm), "new_rows": len(rows_to_append), "msg": msg}
+    except Exception as e:
+        logger.error(f"Batch sync error: {e}")
+        return False, str(e)
