@@ -44,6 +44,24 @@ def _get_spreadsheet_info():
     return spreadsheet_id, sheet_name
 
 
+def _safe_range(sheet_name, cell_range):
+    """Encloses sheet name in single quotes so Google Sheets API handles spaces and underscores cleanly."""
+    clean_name = sheet_name.strip("'\"")
+    return f"'{clean_name}'!{cell_range}"
+
+
+def _get_first_tab_name(service, spreadsheet_id):
+    """Fetches the exact title of the first tab in the Google Spreadsheet."""
+    try:
+        resp = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        sheets = resp.get('sheets', [])
+        if sheets:
+            return sheets[0]['properties']['title']
+    except Exception as e:
+        logger.error(f"Error fetching spreadsheet tabs: {e}")
+    return "Maintenance_Logs"
+
+
 def restore_database_from_sheets():
     """
     Restores SQLite database from Google Sheets every time the server starts.
@@ -60,11 +78,20 @@ def restore_database_from_sheets():
         return
 
     try:
-        range_name = f"{sheet_name}!A2:K"
-        result = service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range=range_name
-        ).execute()
+        range_name = _safe_range(sheet_name, "A2:K")
+        try:
+            result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
+        except Exception:
+            # Fallback to first tab
+            sheet_name = _get_first_tab_name(service, spreadsheet_id)
+            range_name = _safe_range(sheet_name, "A2:K")
+            result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
 
         rows = result.get('values', [])
         if not rows:
@@ -76,11 +103,10 @@ def restore_database_from_sheets():
 
         restored = 0
         for row in rows:
-            # Pad to 11 columns
             while len(row) < 11:
                 row.append('')
 
-            ticket = row[0].strip()
+            ticket = str(row[0]).strip()
             if not ticket:
                 continue
 
@@ -90,8 +116,8 @@ def restore_database_from_sheets():
                 except (ValueError, TypeError):
                     duration = 0
 
-                end_time_val = row[6].strip() if row[6].strip() else None
-                status_val = row[4].strip() if row[4].strip() else 'OPEN'
+                end_time_val = str(row[6]).strip() if str(row[6]).strip() else None
+                status_val = str(row[4]).strip() if str(row[4]).strip() else 'OPEN'
 
                 cursor.execute('''
                     INSERT OR REPLACE INTO breakdowns
@@ -128,7 +154,6 @@ def sync_breakdown_to_sheet(breakdown_dict, spreadsheet_id=None, sheet_name=None
     Upsert a breakdown row in Google Sheets:
     - If a row with this ticket number exists, UPDATE it in-place.
     - Otherwise APPEND a new row.
-    This ensures resolved status is reflected in the sheet immediately.
     """
     service = get_sheets_service()
     if not service:
@@ -143,7 +168,6 @@ def sync_breakdown_to_sheet(breakdown_dict, spreadsheet_id=None, sheet_name=None
 
     ticket_number = breakdown_dict.get('ticket_number', '')
 
-    # Build the row values
     row = [
         ticket_number,
         breakdown_dict.get('department', 'General'),
@@ -159,23 +183,29 @@ def sync_breakdown_to_sheet(breakdown_dict, spreadsheet_id=None, sheet_name=None
     ]
 
     try:
-        # Find existing row in sheet by ticket number (column A)
-        range_name = f"{sheet_name}!A:A"
-        col_result = service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range=range_name
-        ).execute()
+        range_name = _safe_range(sheet_name, "A:A")
+        try:
+            col_result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
+        except Exception:
+            sheet_name = _get_first_tab_name(service, spreadsheet_id)
+            range_name = _safe_range(sheet_name, "A:A")
+            col_result = service.spreadsheets().values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
 
         col_values = col_result.get('values', [])
-        existing_row_index = None  # 1-based row number in sheet
+        existing_row_index = None
         for i, cell in enumerate(col_values):
             if cell and cell[0] == ticket_number:
-                existing_row_index = i + 1  # Sheet rows are 1-indexed
+                existing_row_index = i + 1
                 break
 
         if existing_row_index:
-            # UPDATE existing row in-place
-            update_range = f"{sheet_name}!A{existing_row_index}:K{existing_row_index}"
+            update_range = _safe_range(sheet_name, f"A{existing_row_index}:K{existing_row_index}")
             service.spreadsheets().values().update(
                 spreadsheetId=spreadsheet_id,
                 range=update_range,
@@ -183,16 +213,15 @@ def sync_breakdown_to_sheet(breakdown_dict, spreadsheet_id=None, sheet_name=None
                 body={'values': [row]}
             ).execute()
         else:
-            # APPEND new row
+            append_range = _safe_range(sheet_name, "A:K")
             service.spreadsheets().values().append(
                 spreadsheetId=spreadsheet_id,
-                range=f"{sheet_name}!A:K",
+                range=append_range,
                 valueInputOption='USER_ENTERED',
                 insertDataOption='INSERT_ROWS',
                 body={'values': [row]}
             ).execute()
 
-        # Mark as synced in local DB
         bd_id = breakdown_dict.get('id')
         if bd_id:
             conn = database.get_db_connection()
@@ -227,21 +256,33 @@ def sync_maintenance_to_sheet(maint_dict, spreadsheet_id=None, sheet_name=None):
         maint_dict.get('activity_description', ''),
         'PM',
         (maint_dict.get('performed_at') or '')[:19].replace('T', ' '),
-        '',  # end_time
-        0,   # duration
-        '',  # resolution_notes
+        '',
+        0,
+        '',
         maint_dict.get('technician', '') or maint_dict.get('sender_name', ''),
         (maint_dict.get('performed_at') or '')[:19].replace('T', ' ')
     ]
 
     try:
-        service.spreadsheets().values().append(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A:K",
-            valueInputOption='USER_ENTERED',
-            insertDataOption='INSERT_ROWS',
-            body={'values': [row]}
-        ).execute()
+        append_range = _safe_range(sheet_name, "A:K")
+        try:
+            service.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id,
+                range=append_range,
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body={'values': [row]}
+            ).execute()
+        except Exception:
+            sheet_name = _get_first_tab_name(service, spreadsheet_id)
+            append_range = _safe_range(sheet_name, "A:K")
+            service.spreadsheets().values().append(
+                spreadsheetId=spreadsheet_id,
+                range=append_range,
+                valueInputOption='USER_ENTERED',
+                insertDataOption='INSERT_ROWS',
+                body={'values': [row]}
+            ).execute()
 
         mid = maint_dict.get('id')
         if mid:
@@ -273,12 +314,23 @@ def setup_sheet_headers(spreadsheet_id=None, sheet_name=None):
     ]
 
     try:
-        service.spreadsheets().values().update(
-            spreadsheetId=spreadsheet_id,
-            range=f"{sheet_name}!A1:K1",
-            valueInputOption='USER_ENTERED',
-            body={'values': [headers]}
-        ).execute()
+        header_range = _safe_range(sheet_name, "A1:K1")
+        try:
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=header_range,
+                valueInputOption='USER_ENTERED',
+                body={'values': [headers]}
+            ).execute()
+        except Exception:
+            sheet_name = _get_first_tab_name(service, spreadsheet_id)
+            header_range = _safe_range(sheet_name, "A1:K1")
+            service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=header_range,
+                valueInputOption='USER_ENTERED',
+                body={'values': [headers]}
+            ).execute()
         return True, "Headers set up successfully."
     except Exception as e:
         return False, str(e)
@@ -287,7 +339,7 @@ def setup_sheet_headers(spreadsheet_id=None, sheet_name=None):
 def sync_all_records_batch():
     """
     Fast batch sync of ALL breakdowns and PM logs to Google Sheets.
-    Executes in 1 single API call instead of dozens!
+    Executes in 1 single API call instead of dozens with automatic tab name fallback!
     """
     service = get_sheets_service()
     if not service:
@@ -303,16 +355,23 @@ def sync_all_records_batch():
     all_pm = database.get_all_maintenance(limit=1000)
 
     try:
-        # Fetch existing tickets from column A
-        res = service.spreadsheets().values().get(
-            spreadsheetId=sid,
-            range=f"{sname}!A:A"
-        ).execute()
+        col_range = _safe_range(sname, "A:A")
+        try:
+            res = service.spreadsheets().values().get(
+                spreadsheetId=sid,
+                range=col_range
+            ).execute()
+        except Exception:
+            sname = _get_first_tab_name(service, sid)
+            col_range = _safe_range(sname, "A:A")
+            res = service.spreadsheets().values().get(
+                spreadsheetId=sid,
+                range=col_range
+            ).execute()
+
         existing_tickets = set(r[0] for r in res.get('values', []) if r)
 
         rows_to_append = []
-        synced_bd = 0
-        synced_pm = 0
 
         # Add breakdowns that aren't in Sheet yet
         for bd in reversed(all_bds):
@@ -332,7 +391,6 @@ def sync_all_records_batch():
                     (bd.get('created_at') or '')[:19].replace('T', ' ')
                 ]
                 rows_to_append.append(row)
-                synced_bd += 1
 
         # Add PM logs that aren't in Sheet yet
         for pm in reversed(all_pm):
@@ -350,18 +408,17 @@ def sync_all_records_batch():
                     (pm.get('performed_at') or '')[:19].replace('T', ' ')
                 ]
                 rows_to_append.append(row)
-                synced_pm += 1
 
         if rows_to_append:
+            append_range = _safe_range(sname, "A:K")
             service.spreadsheets().values().append(
                 spreadsheetId=sid,
-                range=f"{sname}!A:K",
+                range=append_range,
                 valueInputOption='USER_ENTERED',
                 insertDataOption='INSERT_ROWS',
                 body={'values': rows_to_append}
             ).execute()
 
-        # Update synced_to_sheets flag in DB
         conn = database.get_db_connection()
         conn.execute("UPDATE breakdowns SET synced_to_sheets = 1")
         conn.execute("UPDATE maintenance_logs SET synced_to_sheets = 1")
