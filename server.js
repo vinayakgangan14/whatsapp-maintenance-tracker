@@ -77,6 +77,36 @@ app.get('/api/maintenance', async (req, res) => {
     res.json(Array.isArray(data) ? data : []);
 });
 
+// One-time sync: push ALL unsynced records to Google Sheets
+app.post('/api/sync-all', async (req, res) => {
+    const code = `
+import database, json, google_sheets
+database.init_db()
+all_bds = database.get_all_breakdowns(limit=1000)
+all_pm  = database.get_all_maintenance(limit=1000)
+synced_bd = 0
+synced_pm = 0
+errors = []
+for bd in all_bds:
+    try:
+        ok, msg = google_sheets.sync_breakdown_to_sheet(bd)
+        if ok:
+            synced_bd += 1
+    except Exception as e:
+        errors.append(str(e))
+for pm in all_pm:
+    try:
+        ok, msg = google_sheets.sync_maintenance_to_sheet(pm)
+        if ok:
+            synced_pm += 1
+    except Exception as e:
+        errors.append(str(e))
+print(json.dumps({"synced_breakdowns": synced_bd, "synced_pm": synced_pm, "errors": errors}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data.raw ? { message: 'Sync attempted' } : data);
+});
+
 app.post('/api/breakdowns/log', async (req, res) => {
     const { department, equipment_id, issue_description, sender_name } = req.body;
     const code = `

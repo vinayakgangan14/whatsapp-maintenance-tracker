@@ -379,6 +379,32 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Google Sheets configuration saved!');
     });
 
+    document.getElementById('btn-sync-all').addEventListener('click', async () => {
+        const statusEl = document.getElementById('sync-all-status');
+        const btn = document.getElementById('btn-sync-all');
+        btn.disabled = true;
+        btn.textContent = '⏳ Syncing... please wait';
+        statusEl.textContent = '';
+
+        try {
+            const res = await fetch('/api/sync-all', { method: 'POST' });
+            const data = await res.json();
+            if (data.synced_breakdowns !== undefined) {
+                statusEl.innerHTML = `✅ <b>Sync complete!</b> ${data.synced_breakdowns} breakdown(s) and ${data.synced_pm} PM log(s) pushed to Google Sheets.` +
+                    (data.errors.length ? `<br>⚠️ ${data.errors.length} error(s): ${data.errors[0]}` : '');
+                statusEl.style.color = data.errors.length ? '#f59e0b' : '#10b981';
+            } else {
+                statusEl.textContent = '⚠️ Sync attempted — check Render logs for details.';
+            }
+        } catch (e) {
+            statusEl.textContent = '❌ Error connecting to server.';
+            statusEl.style.color = '#ef4444';
+        }
+
+        btn.disabled = false;
+        btn.textContent = '⬆️ Sync All Records to Google Sheets Now';
+    });
+
     document.getElementById('btn-save-meta').addEventListener('click', async () => {
         const token = document.getElementById('cfg-meta-token').value.trim();
         const phoneId = document.getElementById('cfg-phone-id').value.trim();
