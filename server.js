@@ -108,8 +108,8 @@ print(json.dumps(result))
     res.json(data.raw ? { error: data.raw } : data);
 });
 
-// One-time fast batch sync: push ALL records to Google Sheets
-app.post('/api/sync-all', async (req, res) => {
+// One-time fast batch sync: push ALL records to Google Sheets (supports GET & POST)
+app.all('/api/sync-all', async (req, res) => {
     const code = `
 import database, json, google_sheets
 database.init_db()
