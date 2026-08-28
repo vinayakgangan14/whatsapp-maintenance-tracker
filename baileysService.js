@@ -35,6 +35,19 @@ function loadCredsFromEnv() {
     ensureAuthFolder();
     try {
         const creds = JSON.parse(envJson);
+
+        // Check if the saved session was never fully registered
+        // (registered:false means QR scan was incomplete)
+        const credsFile = creds['creds.json'];
+        if (credsFile && credsFile.registered === false) {
+            console.log('[Baileys] ⚠️ Saved credentials have registered:false — session was never completed. Starting fresh QR scan.');
+            // Clear any stale files
+            if (fs.existsSync(authFolder)) {
+                fs.rmSync(authFolder, { recursive: true, force: true });
+            }
+            return; // Don't load bad creds — will show fresh QR
+        }
+
         // Write each key as a separate file (Baileys multi-file auth format)
         for (const [filename, content] of Object.entries(creds)) {
             const filePath = path.join(authFolder, filename);
