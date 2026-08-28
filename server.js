@@ -77,6 +77,37 @@ app.get('/api/maintenance', async (req, res) => {
     res.json(Array.isArray(data) ? data : []);
 });
 
+// Debug: test Google Sheets connection and show service account email
+app.get('/api/debug-sheets', async (req, res) => {
+    const code = `
+import json, os, google_sheets, database
+database.init_db()
+result = {"status": "unknown", "email": "", "error": ""}
+try:
+    env_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if env_json:
+        import json as j
+        info = j.loads(env_json)
+        result["email"] = info.get("client_email", "NOT FOUND")
+    service = google_sheets.get_sheets_service()
+    if not service:
+        result["status"] = "NO_CREDENTIALS"
+        result["error"] = "No credentials found"
+    else:
+        sid = os.getenv("GOOGLE_SPREADSHEET_ID") or database.get_setting("GOOGLE_SPREADSHEET_ID")
+        resp = service.spreadsheets().get(spreadsheetId=sid).execute()
+        result["status"] = "OK"
+        result["sheet_title"] = resp.get("properties", {}).get("title", "")
+        result["sheet_tabs"] = [s["properties"]["title"] for s in resp.get("sheets", [])]
+except Exception as e:
+    result["status"] = "ERROR"
+    result["error"] = str(e)
+print(json.dumps(result))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data.raw ? { error: data.raw } : data);
+});
+
 // One-time sync: push ALL unsynced records to Google Sheets
 app.post('/api/sync-all', async (req, res) => {
     const code = `
