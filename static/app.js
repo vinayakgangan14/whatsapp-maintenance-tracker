@@ -348,8 +348,19 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('cfg-phone-id').value = data.phone_number_id || '';
             document.getElementById('cfg-verify-token').value = data.verify_token || 'antigravity_verify_123';
 
-            if (data.has_google_credentials) {
-                document.getElementById('json-status-text').innerHTML = '✅ <b>Google Service Account credentials loaded!</b> (service_account.json)';
+            const statusEl = document.getElementById('json-status-text');
+            if (data.has_google_credentials && data.has_spreadsheet_configured) {
+                statusEl.innerHTML = '✅ <b>Google Sheets fully configured!</b> Credentials + Spreadsheet ID both active.';
+                statusEl.style.color = '#10b981';
+            } else if (data.has_google_credentials && !data.has_spreadsheet_configured) {
+                statusEl.innerHTML = '⚠️ <b>Credentials loaded</b> but Spreadsheet ID is missing. Add GOOGLE_SPREADSHEET_ID to Render env vars.';
+                statusEl.style.color = '#f59e0b';
+            } else if (!data.has_google_credentials && data.has_spreadsheet_configured) {
+                statusEl.innerHTML = '⚠️ <b>Spreadsheet ID set</b> but service account credentials missing. Add GOOGLE_SERVICE_ACCOUNT_JSON to Render env vars.';
+                statusEl.style.color = '#f59e0b';
+            } else {
+                statusEl.innerHTML = '❌ Google Sheets not configured. Add GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_SPREADSHEET_ID to Render env vars.';
+                statusEl.style.color = '#ef4444';
             }
         } catch (err) {
             console.error('Error loading settings:', err);

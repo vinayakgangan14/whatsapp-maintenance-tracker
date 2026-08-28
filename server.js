@@ -169,10 +169,17 @@ app.get('/api/settings', async (req, res) => {
     const data = await runPythonCode(`
 import database, json, os, config
 database.init_db()
+has_creds = os.path.exists(config.CREDENTIALS_FILE) or bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+has_spreadsheet = bool(
+    os.getenv("GOOGLE_SPREADSHEET_ID")
+    or database.get_setting("GOOGLE_SPREADSHEET_ID")
+    or config.DEFAULT_CONFIG.get("GOOGLE_SPREADSHEET_ID")
+)
 print(json.dumps({
-    "spreadsheet_id": database.get_setting("GOOGLE_SPREADSHEET_ID") or config.DEFAULT_CONFIG["GOOGLE_SPREADSHEET_ID"],
-    "sheet_name": database.get_setting("GOOGLE_SHEET_NAME") or config.DEFAULT_CONFIG["GOOGLE_SHEET_NAME"],
-    "has_google_credentials": os.path.exists(config.CREDENTIALS_FILE)
+    "spreadsheet_id": os.getenv("GOOGLE_SPREADSHEET_ID") or database.get_setting("GOOGLE_SPREADSHEET_ID") or config.DEFAULT_CONFIG["GOOGLE_SPREADSHEET_ID"],
+    "sheet_name": os.getenv("GOOGLE_SHEET_NAME") or database.get_setting("GOOGLE_SHEET_NAME") or config.DEFAULT_CONFIG["GOOGLE_SHEET_NAME"],
+    "has_google_credentials": has_creds,
+    "has_spreadsheet_configured": has_spreadsheet
 }))
     `);
     res.json(data.raw ? {} : data);
