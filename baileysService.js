@@ -11,18 +11,77 @@ const fs = require('fs');
 
 let waSock = null;
 let currentQRCodeDataUrl = null;
-let connectionStatus = 'DISCONNECTED'; // DISCONNECTED, CONNECTING, CONNECTED
+let connectionStatus = 'DISCONNECTED'; // DISCONNECTED, CONNECTING, QR_READY, CONNECTED, RECONNECTING
 let isConnecting = false;
+let messageCallback = null;
 
 const authFolder = path.join(__dirname, 'baileys_auth_info');
-if (!fs.existsSync(authFolder)) {
-    fs.mkdirSync(authFolder, { recursive: true });
+
+// ----------------------------------------------------------
+// CREDENTIAL PERSISTENCE via Environment Variable
+// Render wipes local files on restart, so we save auth state
+// to the BAILEYS_AUTH_CREDS_JSON env var instruction (printed
+// to console so you can copy it into Render env vars).
+// ----------------------------------------------------------
+function ensureAuthFolder() {
+    if (!fs.existsSync(authFolder)) {
+        fs.mkdirSync(authFolder, { recursive: true });
+    }
 }
 
+function loadCredsFromEnv() {
+    const envJson = process.env.BAILEYS_AUTH_CREDS_JSON;
+    if (!envJson) return;
+    ensureAuthFolder();
+    try {
+        const creds = JSON.parse(envJson);
+        // Write each key as a separate file (Baileys multi-file auth format)
+        for (const [filename, content] of Object.entries(creds)) {
+            const filePath = path.join(authFolder, filename);
+            fs.writeFileSync(filePath, typeof content === 'string' ? content : JSON.stringify(content), 'utf8');
+        }
+        console.log('[Baileys] ✅ Loaded WhatsApp auth credentials from environment variable.');
+    } catch (e) {
+        console.error('[Baileys] Failed to parse BAILEYS_AUTH_CREDS_JSON:', e.message);
+    }
+}
+
+function printCredsToConsole() {
+    // Bundle auth folder files into a single JSON and print it so
+    // the user can copy it as an env var into Render.
+    if (!fs.existsSync(authFolder)) return;
+    const files = fs.readdirSync(authFolder);
+    if (!files.length) return;
+    const bundle = {};
+    for (const file of files) {
+        const filePath = path.join(authFolder, file);
+        try {
+            bundle[file] = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        } catch {
+            bundle[file] = fs.readFileSync(filePath, 'utf8');
+        }
+    }
+    console.log('\n[Baileys] ======= COPY THIS TO RENDER ENV VARS =======');
+    console.log('Key:   BAILEYS_AUTH_CREDS_JSON');
+    console.log('Value: ' + JSON.stringify(bundle));
+    console.log('[Baileys] ====================================================\n');
+}
+
+// ----------------------------------------------------------
+// CORE ENGINE
+// ----------------------------------------------------------
 async function startBaileysEngine(onMessageReceivedCallback) {
+    if (onMessageReceivedCallback) {
+        messageCallback = onMessageReceivedCallback;
+    }
+
     if (isConnecting || connectionStatus === 'CONNECTED') {
         return;
     }
+
+    // On first run: try restoring creds from env var
+    loadCredsFromEnv();
+    ensureAuthFolder();
 
     isConnecting = true;
     connectionStatus = 'CONNECTING';
@@ -36,10 +95,17 @@ async function startBaileysEngine(onMessageReceivedCallback) {
             logger: pino({ level: 'silent' }),
             printQRInTerminal: false,
             auth: state,
-            browser: ['MaintAgent', 'Chrome', '1.0.0']
+            browser: ['Pure Bot', 'Chrome', '1.0.0'],
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 25000
         });
 
-        waSock.ev.on('creds.update', saveCreds);
+        waSock.ev.on('creds.update', async () => {
+            await saveCreds();
+            // Print updated creds bundle so user can refresh Render env var
+            printCredsToConsole();
+        });
 
         waSock.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
@@ -48,7 +114,7 @@ async function startBaileysEngine(onMessageReceivedCallback) {
                 try {
                     currentQRCodeDataUrl = await QRCode.toDataURL(qr);
                     connectionStatus = 'QR_READY';
-                    console.log('[Baileys] New WhatsApp QR Code generated for scanning.');
+                    console.log('[Baileys] 📱 New WhatsApp QR Code ready. Open the dashboard QR tab to scan.');
                 } catch (err) {
                     console.error('[Baileys] Error rendering QR Code:', err);
                 }
@@ -58,24 +124,28 @@ async function startBaileysEngine(onMessageReceivedCallback) {
                 isConnecting = false;
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-                console.log(`[Baileys] Connection closed due to: ${lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`);
-                
+                console.log(`[Baileys] Connection closed (code=${statusCode}). Reconnect: ${shouldReconnect}`);
+
                 if (shouldReconnect) {
                     connectionStatus = 'RECONNECTING';
-                    setTimeout(() => startBaileysEngine(onMessageReceivedCallback), 3000);
+                    // Exponential-like back-off: first retry after 5s
+                    setTimeout(() => startBaileysEngine(null), 5000);
                 } else {
                     connectionStatus = 'DISCONNECTED';
                     currentQRCodeDataUrl = null;
-                    // Clear auth if logged out
+                    // Clear auth only on explicit logout
                     if (fs.existsSync(authFolder)) {
                         fs.rmSync(authFolder, { recursive: true, force: true });
                     }
+                    console.log('[Baileys] 🔴 Logged out. Scan QR again to reconnect.');
                 }
             } else if (connection === 'open') {
                 isConnecting = false;
                 connectionStatus = 'CONNECTED';
                 currentQRCodeDataUrl = null;
-                console.log('[Baileys] 🟢 WhatsApp Web session connected successfully!');
+                console.log('[Baileys] 🟢 WhatsApp CONNECTED! Pure Bot is online.');
+                // Print creds so user can save them to Render env
+                printCredsToConsole();
             }
         });
 
@@ -83,13 +153,13 @@ async function startBaileysEngine(onMessageReceivedCallback) {
             if (type !== 'notify') return;
 
             for (const msg of messages) {
-                if (msg.key.fromMe) continue; // Ignore self messages
+                if (msg.key.fromMe) continue;
 
                 const fromJid = msg.key.remoteJid;
-                if (!fromJid || fromJid.endsWith('@g.us')) continue; // Ignore group chats for now or support direct chats
+                if (!fromJid || fromJid.endsWith('@g.us')) continue;
 
-                const text = msg.message?.conversation || 
-                             msg.message?.extendedTextMessage?.text || 
+                const text = msg.message?.conversation ||
+                             msg.message?.extendedTextMessage?.text ||
                              '';
 
                 if (!text.trim()) continue;
@@ -97,17 +167,18 @@ async function startBaileysEngine(onMessageReceivedCallback) {
                 const senderPhone = fromJid.replace('@s.whatsapp.net', '');
                 const senderName = msg.pushName || 'WhatsApp User';
 
-                console.log(`[Baileys] Incoming message from ${senderPhone} (${senderName}): "${text}"`);
+                console.log(`[Baileys] 📩 Incoming from ${senderPhone} (${senderName}): "${text}"`);
 
-                if (onMessageReceivedCallback) {
+                const cb = messageCallback || onMessageReceivedCallback;
+                if (cb) {
                     try {
-                        const replyText = await onMessageReceivedCallback(text, senderPhone, senderName);
+                        const replyText = await cb(text, senderPhone, senderName);
                         if (replyText && waSock) {
                             await waSock.sendMessage(fromJid, { text: replyText });
-                            console.log(`[Baileys] Reply sent to ${senderPhone}`);
+                            console.log(`[Baileys] ✉️ Reply sent to ${senderPhone}`);
                         }
                     } catch (err) {
-                        console.error('[Baileys] Error handling message callback:', err);
+                        console.error('[Baileys] Error in message handler:', err);
                     }
                 }
             }
@@ -116,7 +187,9 @@ async function startBaileysEngine(onMessageReceivedCallback) {
     } catch (err) {
         isConnecting = false;
         connectionStatus = 'DISCONNECTED';
-        console.error('[Baileys] Error initializing socket:', err);
+        console.error('[Baileys] Fatal error initializing socket:', err);
+        // Retry after 10s on unexpected errors
+        setTimeout(() => startBaileysEngine(null), 10000);
     }
 }
 

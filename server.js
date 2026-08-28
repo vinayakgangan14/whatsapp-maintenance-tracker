@@ -100,17 +100,27 @@ print(json.dumps({"ticket": ticket, "id": bd_id}))
 
 app.post('/api/breakdowns/resolve', async (req, res) => {
     const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
+
+    // Build Python-safe values (None vs quoted string)
+    const pyTicket   = ticket_number   ? JSON.stringify(ticket_number)   : 'None';
+    const pyEquip    = equipment_id    ? JSON.stringify(equipment_id)    : 'None';
+    const pyNotes    = JSON.stringify(resolution_notes || 'Fixed manually via dashboard');
+    const pyTech     = JSON.stringify(technician || 'Technician');
+
     const code = `
 import database, json, google_sheets
 database.init_db()
 updated, err = database.resolve_breakdown(
-    ticket_number=${JSON.stringify(ticket_number || null)},
-    equipment_id=${JSON.stringify(equipment_id || null)},
-    resolution_notes=${JSON.stringify(resolution_notes || 'Fixed manually via dashboard')},
-    technician=${JSON.stringify(technician || 'Technician')}
+    ticket_number=${pyTicket},
+    equipment_id=${pyEquip},
+    resolution_notes=${pyNotes},
+    technician=${pyTech}
 )
 if updated:
-    google_sheets.sync_breakdown_to_sheet(updated)
+    try:
+        google_sheets.sync_breakdown_to_sheet(updated)
+    except Exception as gs_err:
+        pass
 print(json.dumps({"updated": updated, "err": err}))
     `;
     const data = await runPythonCode(code);
