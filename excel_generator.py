@@ -23,7 +23,7 @@ def generate_excel_report():
     # Title Block
     ws_bd.merge_cells("A1:J1")
     title_cell = ws_bd["A1"]
-    title_cell.value = "WHATSAPP MAINTENANCE & BREAKDOWN TRACKING REPORT"
+    title_cell.value = "PURE BOT FOR MAINTENANCE AND REPAIR — BREAKDOWN TRACKING REPORT"
     title_cell.font = Font(name="Calibri", size=16, bold=True, color="FFFFFF")
     title_cell.fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     title_cell.alignment = Alignment(horizontal="center", vertical="center")
