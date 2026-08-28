@@ -13,14 +13,24 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/static', express.static(path.join(__dirname, 'static')));
 
+function getPythonExecutable() {
+    if (fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe'))) {
+        return path.join(__dirname, '.venv', 'Scripts', 'python.exe');
+    }
+    if (process.platform === 'win32') return 'python';
+    try {
+        execSync('python3 --version', { stdio: 'ignore' });
+        return 'python3';
+    } catch (e) {
+        return 'python';
+    }
+}
+
 // Execute python helper script
 function runPythonCode(pythonCode) {
     return new Promise((resolve) => {
         try {
-            const pyExec = fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe')) 
-                ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
-                : 'python';
-
+            const pyExec = getPythonExecutable();
             const proc = spawn(pyExec, ['-c', pythonCode]);
             let output = '';
 
@@ -194,10 +204,7 @@ print(json.dumps({"reply": reply, "action_type": action, "stats": database.get_s
 
 app.get('/api/export/excel', (req, res) => {
     try {
-        const pyExec = fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe')) 
-            ? path.join(__dirname, '.venv', 'Scripts', 'python.exe')
-            : 'python';
-
+        const pyExec = getPythonExecutable();
         execSync(`${pyExec} -c "import excel_generator; excel_generator.generate_excel_report()"`);
         const exportsDir = path.join(__dirname, 'exports');
         const files = fs.readdirSync(exportsDir);
