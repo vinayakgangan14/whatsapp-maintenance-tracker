@@ -382,6 +382,38 @@
         </div>
     </div>
 
+    <!-- LOG BREAKDOWN MODAL -->
+    <div class="modal" id="modal-log-bd">
+        <div class="modal-content glass-card">
+            <h3>🚨 Report New Equipment Breakdown</h3>
+            <p class="text-muted">Select plant location and specify breakdown details</p>
+            <div class="form-group">
+                <label>Plant / Facility Location</label>
+                <select id="modal-bd-plant" class="form-control" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                    <option value="LCP/PU">LCP/PU</option>
+                    <option value="PVac 1">PVac 1</option>
+                    <option value="PVac 2">PVac 2</option>
+                    <option value="DCP">DCP</option>
+                    <option value="Plastic">Plastic</option>
+                    <option value="Boiler House">Boiler House</option>
+                    <option value="Cooling Tower">Cooling Tower</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Equipment Details / Name</label>
+                <input type="text" id="modal-bd-eq" placeholder="e.g. Press #3 or Hydraulic Pump">
+            </div>
+            <div class="form-group">
+                <label>Issue Description</label>
+                <textarea id="modal-bd-issue" rows="3" placeholder="Describe the breakdown issue..."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btn-close-bd-modal">Cancel</button>
+                <button class="btn btn-emerald" id="btn-confirm-log-bd">Submit Breakdown</button>
+            </div>
+        </div>
+    </div>
+
     <script src="/static/app.js"></script>
 </body>
 </html>

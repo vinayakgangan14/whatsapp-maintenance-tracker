@@ -263,25 +263,48 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Quick Log Breakdown button
+    // Quick Log Breakdown Modal
+    const bdModal = document.getElementById('modal-log-bd');
     document.getElementById('btn-quick-log').addEventListener('click', () => {
-        const dept = prompt("Enter Department Name:", "Production Line A");
-        if (!dept) return;
-        const eq = prompt("Enter Equipment ID / Name:", "Compressor #1");
-        if (!eq) return;
-        const issue = prompt("Enter Issue Description:", "Overheating pressure valve");
-        if (!issue) return;
-
-        fetch('/api/breakdowns/log', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                department: dept,
-                equipment_id: eq,
-                issue_description: issue
-            })
-        }).then(r => r.json()).then(() => refreshAll());
+        document.getElementById('modal-bd-eq').value = '';
+        document.getElementById('modal-bd-issue').value = '';
+        if (bdModal) bdModal.classList.add('active');
     });
+
+    if (document.getElementById('btn-close-bd-modal')) {
+        document.getElementById('btn-close-bd-modal').addEventListener('click', () => {
+            if (bdModal) bdModal.classList.remove('active');
+        });
+    }
+
+    if (document.getElementById('btn-confirm-log-bd')) {
+        document.getElementById('btn-confirm-log-bd').addEventListener('click', async () => {
+            const plant = document.getElementById('modal-bd-plant').value;
+            const eq = document.getElementById('modal-bd-eq').value.trim();
+            const issue = document.getElementById('modal-bd-issue').value.trim();
+
+            if (!eq || !issue) {
+                alert('Please enter both equipment details and issue description.');
+                return;
+            }
+
+            try {
+                await fetch('/api/breakdowns/log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        department: plant,
+                        equipment_id: eq,
+                        issue_description: issue
+                    })
+                });
+                if (bdModal) bdModal.classList.remove('active');
+                refreshAll();
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    }
 
     // ----------------------------------------------------
     // WHATSAPP SIMULATOR LOGIC

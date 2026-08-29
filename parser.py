@@ -103,10 +103,16 @@ def parse_whatsapp_message(text, sender_phone="", sender_name=""):
         if user_key in USER_STATES: del USER_STATES[user_key]
         content = shortcut_fix.group(1).strip() if shortcut_fix else (natural_fix.group(1).strip() if natural_fix else cleaned_text)
         dept, content_no_dept = extract_department(content)
-        
-        parts = re.split(r'[-:]', content_no_dept, maxsplit=1)
-        target = parts[0].strip()
-        resolution = parts[1].strip() if len(parts) > 1 else "Fixed & verified operational"
+
+        # Check if full ticket ID is provided (e.g. BD-202608-001)
+        ticket_match = re.search(r'((?:BD|PM|WD)-\d{6}-\d{3})', content_no_dept, re.IGNORECASE)
+        if ticket_match:
+            target = ticket_match.group(1).upper()
+            resolution = content_no_dept.replace(ticket_match.group(0), '').strip(' -:') or "Fixed & verified operational"
+        else:
+            parts = re.split(r'[-:]', content_no_dept, maxsplit=1)
+            target = parts[0].strip()
+            resolution = parts[1].strip() if len(parts) > 1 else "Fixed & verified operational"
         
         record, err = database.resolve_breakdown(
             ticket_number=target if (target.upper().startswith("BD-") or target.upper().startswith("WD-") or target.upper().startswith("PM-")) else None,
@@ -147,9 +153,18 @@ def parse_whatsapp_message(text, sender_phone="", sender_name=""):
         return (
             "🚨 *REPORT BREAKDOWN*\n"
             "-----------------------------------\n"
-            "Please reply with breakdown details in format:\n"
-            "`Equipment Details | Location | Issue Description`\n\n"
-            "Example:\n`Press 3 | Production Line A | Hydraulic Oil Leak`"
+            "Select Plant / Area (1-7):\n"
+            "1️⃣ LCP/PU\n"
+            "2️⃣ PVac 1\n"
+            "3️⃣ PVac 2\n"
+            "4️⃣ DCP\n"
+            "5️⃣ Plastic\n"
+            "6️⃣ Boiler House\n"
+            "7️⃣ Cooling Tower\n\n"
+            "Please reply in format:\n"
+            "`Plant Number or Name | Equipment | Issue Description`\n\n"
+            "Example:\n`1 | Press 3 | Hydraulic Oil Leak`\n"
+            "*(or: `Boiler House | Boiler 1 | Trip`)*"
         ), "PROMPT_BD", {}
 
     bd_match = re.search(r'^(?:1|breakdown|bd|down|fault)\s+(.+)', cleaned_text, re.IGNORECASE)
@@ -159,16 +174,18 @@ def parse_whatsapp_message(text, sender_phone="", sender_name=""):
         
         parts = [p.strip() for p in body.split('|')]
         if len(parts) >= 3:
-            eq_id, location, issue = parts[0], parts[1], parts[2]
-            dept = location
+            plant_raw, eq_id, issue = parts[0], parts[1], parts[2]
+            dept = resolve_plant_name(plant_raw)
         elif len(parts) == 2:
-            eq_id, issue = parts[0], parts[1]
-            dept = "General"
+            plant_raw, eq_id = parts[0], parts[1]
+            dept = resolve_plant_name(plant_raw)
+            issue = eq_id
         else:
             dept, body_no_dept = extract_department(body)
             sub_parts = re.split(r'[-:]', body_no_dept, maxsplit=1)
             eq_id = sub_parts[0].strip()
             issue = sub_parts[1].strip() if len(sub_parts) > 1 else body_no_dept
+            dept = resolve_plant_name(dept)
 
         ticket, bd_id = database.log_breakdown(
             department=dept,
@@ -186,13 +203,13 @@ def parse_whatsapp_message(text, sender_phone="", sender_name=""):
             f"🚨 *PURE BOT: BREAKDOWN LOGGED*\n"
             f"-----------------------------------\n"
             f"🎫 *Ticket*: *{ticket}*\n"
+            f"🏢 *Plant/Location*: *{dept}*\n"
             f"⚙️ *Equipment*: *{eq_id}*\n"
-            f"📍 *Location/Dept*: {dept}\n"
             f"⚠️ *Issue*: {issue}\n"
             f"🕒 *Started*: {datetime_now_str()}\n\n"
-            f"To close when repaired, reply:\n`{ticket} Fixed` or `2 {eq_id} Fixed`"
+            f"To close when repaired, reply:\n`{ticket} Fixed` or `6 {ticket} Fixed`"
         )
-        return reply, "BD_SUCCESS", {"ticket": ticket, "equipment": eq_id}
+        return reply, "BD_SUCCESS", {"ticket": ticket, "equipment": eq_id, "department": dept}
 
     # ------------------------------------------------------------------
     # OPTION 2: SCHEDULE PREVENTIVE MAINTENANCE
@@ -332,6 +349,25 @@ def _sync_maintenance(ticket):
         if row: google_sheets.sync_maintenance_to_sheet(dict(row))
     except Exception as e:
         print(f"[Pure Bot] PM Sheets sync error: {e}")
+
+PLANTS_MAP = {
+    "1": "LCP/PU",
+    "2": "PVac 1",
+    "3": "PVac 2",
+    "4": "DCP",
+    "5": "Plastic",
+    "6": "Boiler House",
+    "7": "Cooling Tower"
+}
+
+def resolve_plant_name(text):
+    clean = str(text).strip()
+    if clean in PLANTS_MAP:
+        return PLANTS_MAP[clean]
+    for key, val in PLANTS_MAP.items():
+        if clean.lower() == val.lower():
+            return val
+    return clean if clean else "General"
 
 def extract_department(text):
     bracket_match = re.search(r'\[(?:dept:\s*)?([^\]]+)\]', text, re.IGNORECASE)

@@ -48,6 +48,10 @@ def init_db():
             synced_to_sheets INTEGER DEFAULT 0
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN scheduled_time TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     # Scheduled Welding Work table
     cursor.execute('''
