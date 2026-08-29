@@ -106,6 +106,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kpi-downtime').innerHTML = `${data.total_downtime_hours} <small style="font-size: 1rem">hrs</small>`;
             document.getElementById('kpi-downtime-mins').innerText = `${data.total_downtime_minutes} total minutes`;
             document.getElementById('kpi-mttr').innerHTML = `${data.mttr_minutes} <small style="font-size: 1rem">mins</small>`;
+            if (document.getElementById('kpi-mtbf')) {
+                document.getElementById('kpi-mtbf').innerHTML = `${data.mtbf_hours || 0} <small style="font-size: 1rem">hrs</small>`;
+            }
 
             initCharts(data);
         } catch (err) {

@@ -156,6 +156,51 @@ def generate_excel_report():
         col_letter = get_column_letter(col[0].column)
         ws_pm.column_dimensions[col_letter].width = max(max_len + 4, 14)
 
+    # ----------------------------------------------------
+    # TAB 3: SCHEDULED WELDING WORK
+    # ----------------------------------------------------
+    ws_wd = wb.create_sheet(title="Welding Work")
+    ws_wd.views.sheetView[0].showGridLines = True
+
+    ws_wd.merge_cells("A1:G1")
+    wd_title = ws_wd["A1"]
+    wd_title.value = "SCHEDULED WELDING & FABRICATION WORK LOG"
+    wd_title.font = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
+    wd_title.fill = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")
+    wd_title.alignment = Alignment(horizontal="center", vertical="center")
+    ws_wd.row_dimensions[1].height = 35
+
+    wd_headers = ["Ticket Number", "Department / Location", "Equipment / Structure", "Welding Details", "Scheduled Time", "Status", "Technician / Logged By"]
+    for col_num, header in enumerate(wd_headers, 1):
+        cell = ws_wd.cell(row=3, column=col_num)
+        cell.value = header
+        cell.font = header_font
+        cell.fill = PatternFill(start_color="C65911", end_color="C65911", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = thin_border
+    ws_wd.row_dimensions[3].height = 26
+
+    wd_logs = database.get_all_welding(limit=500)
+    for row_idx, item in enumerate(wd_logs, start=4):
+        ws_wd.cell(row=row_idx, column=1, value=item['ticket_number']).alignment = Alignment(horizontal="center")
+        ws_wd.cell(row=row_idx, column=2, value=item['department'] or item.get('location', 'General')).alignment = Alignment(horizontal="center")
+        ws_wd.cell(row=row_idx, column=3, value=item['equipment_id']).alignment = Alignment(horizontal="left")
+        ws_wd.cell(row=row_idx, column=4, value=item['welding_details']).alignment = Alignment(horizontal="left")
+        ws_wd.cell(row=row_idx, column=5, value=item['scheduled_time'] or 'As Scheduled').alignment = Alignment(horizontal="center")
+        ws_wd.cell(row=row_idx, column=6, value=item['status']).alignment = Alignment(horizontal="center")
+        ws_wd.cell(row=row_idx, column=7, value=item['technician']).alignment = Alignment(horizontal="left")
+
+        for c in range(1, 8):
+            cell = ws_wd.cell(row=row_idx, column=c)
+            cell.border = thin_border
+            cell.font = regular_font
+        ws_wd.row_dimensions[row_idx].height = 20
+
+    for col in ws_wd.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws_wd.column_dimensions[col_letter].width = max(max_len + 4, 14)
+
     # Save to file
     filename = f"Maintenance_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = EXPORTS_DIR / filename

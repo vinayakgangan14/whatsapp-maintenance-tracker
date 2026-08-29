@@ -141,6 +141,16 @@ def restore_database_from_sheets():
                 ''', (ticket, row[1], row[2], row[3], row[9], row[10]))
                 restored += 1
 
+            elif ticket.startswith("WD-"):
+                status_val = str(row[4]).strip() if str(row[4]).strip() else 'OPEN'
+                cursor.execute('''
+                    INSERT OR REPLACE INTO welding_logs
+                    (ticket_number, department, equipment_id, welding_details,
+                     status, technician, created_at, synced_to_sheets)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ''', (ticket, row[1], row[2], row[3], status_val, row[9], row[10]))
+                restored += 1
+
         conn.commit()
         conn.close()
         print(f"[Pure Bot Backup] ✅ Restored {restored} records from Google Sheets.")
@@ -392,6 +402,10 @@ def sync_all_records_batch():
                 ]
                 rows_to_append.append(row)
 
+        all_bds = database.get_all_breakdowns(limit=1000)
+        all_pm = database.get_all_maintenance(limit=1000)
+        all_wd = database.get_all_welding(limit=1000)
+
         # Add PM logs that aren't in Sheet yet
         for pm in reversed(all_pm):
             t = pm.get('ticket_number', '')
@@ -406,6 +420,23 @@ def sync_all_records_batch():
                     '', 0, '',
                     pm.get('technician', '') or pm.get('sender_name', ''),
                     (pm.get('performed_at') or '')[:19].replace('T', ' ')
+                ]
+                rows_to_append.append(row)
+
+        # Add Welding logs that aren't in Sheet yet
+        for wd in reversed(all_wd):
+            t = wd.get('ticket_number', '')
+            if t and t not in existing_tickets:
+                row = [
+                    t,
+                    wd.get('department', 'General'),
+                    wd.get('equipment_id', ''),
+                    wd.get('welding_details', ''),
+                    wd.get('status', 'OPEN'),
+                    (wd.get('created_at') or '')[:19].replace('T', ' '),
+                    '', 0, '',
+                    wd.get('technician', '') or wd.get('sender_name', ''),
+                    (wd.get('created_at') or '')[:19].replace('T', ' ')
                 ]
                 rows_to_append.append(row)
 

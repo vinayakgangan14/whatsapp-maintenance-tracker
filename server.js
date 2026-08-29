@@ -87,6 +87,11 @@ app.get('/api/maintenance', async (req, res) => {
     res.json(Array.isArray(data) ? data : []);
 });
 
+app.get('/api/welding', async (req, res) => {
+    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_welding()))');
+    res.json(Array.isArray(data) ? data : []);
+});
+
 // Debug: test Google Sheets connection and show service account email
 app.get('/api/debug-sheets', async (req, res) => {
     const code = `
