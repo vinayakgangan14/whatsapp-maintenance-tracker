@@ -321,6 +321,16 @@ def set_setting(key, value):
     conn.commit()
     conn.close()
 
+def clear_all_records():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM breakdowns")
+    cursor.execute("DELETE FROM maintenance_logs")
+    cursor.execute("DELETE FROM welding_logs")
+    conn.commit()
+    conn.close()
+    return True
+
 if __name__ == "__main__":
     init_db()
     print("Database initialized successfully.")

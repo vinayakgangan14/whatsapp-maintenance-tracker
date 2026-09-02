@@ -446,6 +446,27 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('WhatsApp settings saved!');
     });
 
+    // Client Handover Reset Button
+    if (document.getElementById('btn-reset-db')) {
+        document.getElementById('btn-reset-db').addEventListener('click', async () => {
+            if (!confirm('⚠️ Are you sure you want to clear ALL breakdown tickets and maintenance records for client handover? This action cannot be undone.')) {
+                return;
+            }
+
+            const statusEl = document.getElementById('reset-db-status');
+            try {
+                const res = await fetch('/api/reset-database', { method: 'POST' });
+                const data = await res.json();
+                statusEl.innerHTML = '✅ <b>All test records cleared successfully!</b> Ready for fresh client handover.';
+                statusEl.style.color = '#10b981';
+                refreshAll();
+            } catch (e) {
+                statusEl.textContent = '❌ Error clearing database.';
+                statusEl.style.color = '#ef4444';
+            }
+        });
+    }
+
     // File upload for JSON key
     const jsonInput = document.getElementById('json-file-input');
     jsonInput.addEventListener('change', async () => {

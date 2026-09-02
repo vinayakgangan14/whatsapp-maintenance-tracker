@@ -138,6 +138,18 @@ else:
     res.json(data.raw ? { error: data.raw } : data);
 });
 
+// Clear all database records for client handover
+app.post('/api/reset-database', async (req, res) => {
+    const code = `
+import database, json
+database.init_db()
+database.clear_all_records()
+print(json.dumps({"message": "Database cleared successfully"}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
 app.post('/api/breakdowns/log', async (req, res) => {
     const { department, equipment_id, issue_description, sender_name } = req.body;
     const code = `
