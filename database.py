@@ -23,7 +23,7 @@ def init_db():
             issue_description TEXT NOT NULL,
             start_time TEXT NOT NULL,
             end_time TEXT,
-            status TEXT NOT NULL DEFAULT 'OPEN',
+            status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
             duration_minutes INTEGER DEFAULT 0,
             resolution_notes TEXT,
             technician TEXT,
@@ -43,6 +43,7 @@ def init_db():
             equipment_id TEXT NOT NULL,
             activity_description TEXT NOT NULL,
             scheduled_time TEXT,
+            status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
             technician TEXT,
             performed_at TEXT NOT NULL,
             synced_to_sheets INTEGER DEFAULT 0
@@ -50,6 +51,10 @@ def init_db():
     ''')
     try:
         cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN scheduled_time TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN status TEXT DEFAULT 'PENDING_APPROVAL'")
     except sqlite3.OperationalError:
         pass
 
@@ -65,7 +70,7 @@ def init_db():
             location TEXT,
             welding_details TEXT NOT NULL,
             scheduled_time TEXT,
-            status TEXT NOT NULL DEFAULT 'OPEN',
+            status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
             technician TEXT,
             created_at TEXT NOT NULL,
             synced_to_sheets INTEGER DEFAULT 0
@@ -111,7 +116,7 @@ def log_breakdown(department, equipment_id, issue_description, sender_phone="", 
     cursor.execute('''
         INSERT INTO breakdowns 
         (ticket_number, department, sender_phone, sender_name, equipment_id, issue_description, start_time, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?)
     ''', (ticket, department, sender_phone, sender_name, equipment_id, issue_description, now_str, now_str))
     
     conn.commit()
@@ -186,8 +191,8 @@ def log_maintenance(department, equipment_id, activity_description, scheduled_ti
     
     cursor.execute('''
         INSERT INTO maintenance_logs
-        (ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, technician, performed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, status, technician, performed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
     ''', (ticket, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, technician or sender_name, now_str))
     
     conn.commit()
@@ -204,17 +209,48 @@ def log_welding(department, equipment_id, location, welding_details, scheduled_t
     cursor.execute('''
         INSERT INTO welding_logs
         (ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, technician, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
     ''', (ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, technician or sender_name, now_str))
     
     conn.commit()
     conn.close()
     return ticket
 
+def approve_ticket(ticket_number, manager_name="Maintenance Manager"):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if ticket_number.startswith("BD-"):
+        cursor.execute("UPDATE breakdowns SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+    elif ticket_number.startswith("PM-"):
+        cursor.execute("UPDATE maintenance_logs SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+    elif ticket_number.startswith("WD-"):
+        cursor.execute("UPDATE welding_logs SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+        
+    conn.commit()
+    conn.close()
+    return True, "Ticket approved successfully."
+
+def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    note = f"Rejected by {manager_name}" + (f": {reason}" if reason else "")
+    if ticket_number.startswith("BD-"):
+        cursor.execute("UPDATE breakdowns SET status = 'REJECTED', resolution_notes = ? WHERE ticket_number = ?", (note, ticket_number))
+    elif ticket_number.startswith("PM-"):
+        cursor.execute("UPDATE maintenance_logs SET status = 'REJECTED' WHERE ticket_number = ?", (ticket_number,))
+    elif ticket_number.startswith("WD-"):
+        cursor.execute("UPDATE welding_logs SET status = 'REJECTED' WHERE ticket_number = ?", (ticket_number,))
+        
+    conn.commit()
+    conn.close()
+    return True, "Ticket rejected."
+
 def get_open_breakdowns():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM breakdowns WHERE status != 'RESOLVED' ORDER BY id DESC")
+    cursor.execute("SELECT * FROM breakdowns WHERE status != 'RESOLVED' AND status != 'REJECTED' ORDER BY id DESC")
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
@@ -222,7 +258,7 @@ def get_open_breakdowns():
 def get_open_welding():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM welding_logs WHERE status != 'RESOLVED' ORDER BY id DESC")
+    cursor.execute("SELECT * FROM welding_logs WHERE status != 'RESOLVED' AND status != 'REJECTED' ORDER BY id DESC")
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
@@ -258,8 +294,11 @@ def get_statistics():
     cursor.execute("SELECT COUNT(*) as total_bd FROM breakdowns")
     total_bd = cursor.fetchone()['total_bd']
     
-    cursor.execute("SELECT COUNT(*) as open_bd FROM breakdowns WHERE status != 'RESOLVED'")
+    cursor.execute("SELECT COUNT(*) as open_bd FROM breakdowns WHERE status != 'RESOLVED' AND status != 'REJECTED'")
     open_bd = cursor.fetchone()['open_bd']
+
+    cursor.execute("SELECT COUNT(*) as pending_bd FROM breakdowns WHERE status = 'PENDING_APPROVAL'")
+    pending_bd = cursor.fetchone()['pending_bd']
     
     cursor.execute("SELECT COUNT(*) as resolved_bd FROM breakdowns WHERE status = 'RESOLVED'")
     resolved_bd = cursor.fetchone()['resolved_bd']
@@ -273,21 +312,14 @@ def get_statistics():
     cursor.execute("SELECT COUNT(*) as total_wd FROM welding_logs")
     total_wd = cursor.fetchone()['total_wd']
     
-    cursor.execute("SELECT COUNT(*) as open_wd FROM welding_logs WHERE status != 'RESOLVED'")
+    cursor.execute("SELECT COUNT(*) as open_wd FROM welding_logs WHERE status != 'RESOLVED' AND status != 'REJECTED'")
     open_wd = cursor.fetchone()['open_wd']
     
-    # ------------------------------------------------------------------
-    # MTTR & MTBF CALCULATIONS
-    # MTTR = Mean Time To Repair = Total Downtime / Resolved Breakdowns
-    # MTBF = Mean Time Between Failures = Total Operating Time / Total Breakdowns
-    # Assumes standard plant operation (e.g. 30 days * 24 hrs = 720 operating hrs/month)
-    # ------------------------------------------------------------------
     mttr = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0
     
-    operating_hours = max(1, (30 * 24) - (sum_downtime / 60)) # 30 days plant availability minus downtime
+    operating_hours = max(1, (30 * 24) - (sum_downtime / 60))
     mtbf_hours = round(operating_hours / max(1, total_bd), 1) if total_bd > 0 else round(30 * 24, 1)
     
-    # Department distribution
     cursor.execute("SELECT department, COUNT(*) as count FROM breakdowns GROUP BY department")
     dept_counts = {row['department']: row['count'] for row in cursor.fetchall()}
     
@@ -295,6 +327,7 @@ def get_statistics():
     return {
         "total_breakdowns": total_bd,
         "open_breakdowns": open_bd,
+        "pending_breakdowns": pending_bd,
         "resolved_breakdowns": resolved_bd,
         "total_downtime_minutes": sum_downtime,
         "total_downtime_hours": round(sum_downtime / 60, 2),

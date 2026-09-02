@@ -149,6 +149,71 @@ print(json.dumps({"ticket": ticket, "id": bd_id}))
     res.json(data.ticket ? data : { message: "Logged" });
 });
 
+app.post('/api/pm/log', async (req, res) => {
+    const { department, equipment_id, activity_description, scheduled_time, technician } = req.body;
+    const code = `
+import database, json, google_sheets
+database.init_db()
+ticket = database.log_maintenance(
+    department=${JSON.stringify(department || 'General')},
+    equipment_id=${JSON.stringify(equipment_id)},
+    activity_description=${JSON.stringify(activity_description)},
+    scheduled_time=${JSON.stringify(scheduled_time || 'As Scheduled')},
+    technician=${JSON.stringify(technician || 'Maintenance Tech')}
+)
+try:
+    google_sheets.sync_maintenance_to_sheet({"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}})
+except Exception as e:
+    pass
+print(json.dumps({"ticket": ticket}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
+app.post('/api/welding/log', async (req, res) => {
+    const { department, equipment_id, welding_details, scheduled_time, technician } = req.body;
+    const code = `
+import database, json
+database.init_db()
+ticket = database.log_welding(
+    department=${JSON.stringify(department || 'General')},
+    equipment_id=${JSON.stringify(equipment_id)},
+    location=${JSON.stringify(department || 'General')},
+    welding_details=${JSON.stringify(welding_details)},
+    scheduled_time=${JSON.stringify(scheduled_time || 'Today')},
+    technician=${JSON.stringify(technician || 'Welder')}
+)
+print(json.dumps({"ticket": ticket}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
+app.post('/api/ticket/approve', async (req, res) => {
+    const { ticket_number, manager_name } = req.body;
+    const code = `
+import database, json
+database.init_db()
+ok, msg = database.approve_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')})
+print(json.dumps({"ok": ok, "msg": msg}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
+app.post('/api/ticket/reject', async (req, res) => {
+    const { ticket_number, manager_name, reason } = req.body;
+    const code = `
+import database, json
+database.init_db()
+ok, msg = database.reject_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')}, ${JSON.stringify(reason || '')})
+print(json.dumps({"ok": ok, "msg": msg}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
 app.post('/api/breakdowns/resolve', async (req, res) => {
     const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
 
@@ -222,7 +287,6 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, async () => {
     console.log(`🚀 Maintenance Portal running on port ${PORT}`);
-    // Restore database from Google Sheets on startup if empty
     try {
         await runPythonCode('import google_sheets; google_sheets.restore_database_from_sheets()');
         console.log('[Pure Portal] Startup database restore completed.');

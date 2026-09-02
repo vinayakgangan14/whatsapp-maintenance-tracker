@@ -11,6 +11,35 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
+    <!-- LOGIN OVERLAY -->
+    <div class="modal active" id="login-modal" style="background: rgba(10, 15, 30, 0.95); backdrop-filter: blur(12px); z-index: 9999;">
+        <div class="modal-content glass-card" style="max-width: 420px; text-align: center; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div style="font-size: 3rem; margin-bottom: 0.5rem;">🛠️</div>
+            <h2 style="margin-bottom: 0.25rem;">Pure Portal Login</h2>
+            <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.5rem;">Select your role to access the Maintenance Suite</p>
+
+            <div class="form-group" style="text-align: left;">
+                <label>User Role</label>
+                <select id="login-role" class="form-control" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                    <option value="Operator">Operator / Technician</option>
+                    <option value="Manager">Maintenance Manager</option>
+                </select>
+            </div>
+
+            <div class="form-group" style="text-align: left;">
+                <label>Your Name / Username</label>
+                <input type="text" id="login-username" placeholder="e.g. John Doe" value="John Technician" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+            </div>
+
+            <div class="form-group" id="passcode-group" style="text-align: left; display: none;">
+                <label>Manager Passcode</label>
+                <input type="password" id="login-passcode" placeholder="Enter Manager Passcode (admin123)" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+            </div>
+
+            <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Portal</button>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Sidebar Navigation -->
         <aside class="sidebar">
@@ -19,7 +48,7 @@
                     <div class="brand-icon">🛠️</div>
                     <div class="brand-text">
                         <h2>Pure Portal</h2>
-                        <span class="badge 247-badge">Maintenance Suite</span>
+                        <span class="badge 247-badge" id="sidebar-role-badge">Operator Mode</span>
                     </div>
                 </div>
                 <button class="mobile-toggle-btn" id="mobile-menu-btn">☰</button>
@@ -49,7 +78,7 @@
             <div class="server-status">
                 <div class="status-indicator online"></div>
                 <div class="status-text">
-                    <strong>System Active</strong>
+                    <strong id="logged-user-display">User: Technician</strong>
                     <small>Real-time Google Sheets Sync</small>
                 </div>
             </div>
@@ -63,13 +92,22 @@
                     <h1 id="page-title">Pure Maintenance & Breakdown Portal</h1>
                     <p class="subtitle">Multi-plant breakdown reporting, MTTR/MTBF analytics, and Google Sheets live logging</p>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <button class="btn btn-emerald" id="btn-quick-log">
                         <span>+ Report Breakdown</span>
                     </button>
+                    <button class="btn" id="btn-schedule-pm" style="background: #3b82f6; color: #fff;">
+                        <span>+ Schedule PM</span>
+                    </button>
+                    <button class="btn" id="btn-schedule-welding" style="background: #f97316; color: #fff;">
+                        <span>+ Schedule Welding</span>
+                    </button>
                     <a href="/api/export/excel" class="btn btn-outline" id="btn-export-excel">
-                        <span>📥 Export Excel (.xlsx)</span>
+                        <span>📥 Export Excel</span>
                     </a>
+                    <button class="btn btn-outline" id="btn-logout" style="border-color: rgba(255,255,255,0.2);">
+                        <span>🔒 Switch Role</span>
+                    </button>
                 </div>
             </header>
 
@@ -155,6 +193,7 @@
                         <div class="filter-group">
                             <select id="status-filter">
                                 <option value="ALL">All Statuses</option>
+                                <option value="PENDING_APPROVAL">Pending Approval</option>
                                 <option value="OPEN">Open Only</option>
                                 <option value="RESOLVED">Resolved Only</option>
                             </select>
@@ -173,7 +212,7 @@
                                     <th>Start Time</th>
                                     <th>End Time</th>
                                     <th>Downtime</th>
-                                    <th>Action</th>
+                                    <th>Action / Manager Approval</th>
                                 </tr>
                             </thead>
                             <tbody id="breakdowns-table-body">
@@ -198,12 +237,14 @@
                                     <th>Plant / Dept</th>
                                     <th>Equipment ID</th>
                                     <th>Activity Description</th>
+                                    <th>Scheduled Time</th>
+                                    <th>Status</th>
                                     <th>Technician</th>
-                                    <th>Performed At</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="pm-table-body">
-                                <tr><td colspan="6" class="text-center">Loading PM records...</td></tr>
+                                <tr><td colspan="8" class="text-center">Loading PM records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -227,10 +268,11 @@
                                     <th>Scheduled Time</th>
                                     <th>Status</th>
                                     <th>Technician</th>
+                                    <th>Action</th>
                                 </tr>
                             </thead>
                             <tbody id="welding-table-body">
-                                <tr><td colspan="7" class="text-center">Loading Welding records...</td></tr>
+                                <tr><td colspan="8" class="text-center">Loading Welding records...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -329,6 +371,86 @@
             <div class="modal-actions">
                 <button class="btn btn-outline" id="btn-close-bd-modal">Cancel</button>
                 <button class="btn btn-emerald" id="btn-confirm-log-bd">Submit Breakdown</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCHEDULE PM MODAL -->
+    <div class="modal" id="modal-log-pm">
+        <div class="modal-content glass-card">
+            <h3>⚙️ Schedule Preventive Maintenance (PM)</h3>
+            <p class="text-muted">Select plant location and specify scheduled maintenance activity</p>
+            <div class="form-group">
+                <label>Plant / Facility Location</label>
+                <select id="modal-pm-plant" class="form-control" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                    <option value="LCP/PU">LCP/PU</option>
+                    <option value="PVac 1">PVac 1</option>
+                    <option value="PVac 2">PVac 2</option>
+                    <option value="DCP">DCP</option>
+                    <option value="Plastic">Plastic</option>
+                    <option value="Boiler House">Boiler House</option>
+                    <option value="Cooling Tower">Cooling Tower</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Equipment ID / Name</label>
+                <input type="text" id="modal-pm-eq" placeholder="e.g. Air Compressor #2">
+            </div>
+            <div class="form-group">
+                <label>PM Activity Description</label>
+                <textarea id="modal-pm-desc" rows="3" placeholder="e.g. Monthly oil filter & valve inspection"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Scheduled Date & Time</label>
+                <input type="text" id="modal-pm-time" placeholder="e.g. Tomorrow 10 AM or 2026-09-05 09:00" value="Tomorrow 10 AM">
+            </div>
+            <div class="form-group">
+                <label>Assigned Technician</label>
+                <input type="text" id="modal-pm-tech" placeholder="e.g. Alex Maintenance">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btn-close-pm-modal">Cancel</button>
+                <button class="btn btn-primary" id="btn-confirm-log-pm">Submit PM Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCHEDULE WELDING MODAL -->
+    <div class="modal" id="modal-log-welding">
+        <div class="modal-content glass-card">
+            <h3>🔥 Schedule Welding Work</h3>
+            <p class="text-muted">Select plant location and specify welding/fabrication details</p>
+            <div class="form-group">
+                <label>Plant / Facility Location</label>
+                <select id="modal-wd-plant" class="form-control" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                    <option value="LCP/PU">LCP/PU</option>
+                    <option value="PVac 1">PVac 1</option>
+                    <option value="PVac 2">PVac 2</option>
+                    <option value="DCP">DCP</option>
+                    <option value="Plastic">Plastic</option>
+                    <option value="Boiler House">Boiler House</option>
+                    <option value="Cooling Tower">Cooling Tower</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Equipment / Structure Name</label>
+                <input type="text" id="modal-wd-eq" placeholder="e.g. Conveyor Frame Line B">
+            </div>
+            <div class="form-group">
+                <label>Welding Work Details</label>
+                <textarea id="modal-wd-details" rows="3" placeholder="e.g. Guard rail reinforcement & joint welding"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Scheduled Date & Time</label>
+                <input type="text" id="modal-wd-time" placeholder="e.g. 3 PM Today or 2026-09-04 14:00" value="Today 3 PM">
+            </div>
+            <div class="form-group">
+                <label>Assigned Welder / Technician</label>
+                <input type="text" id="modal-wd-tech" placeholder="e.g. Sam Welder">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" id="btn-close-wd-modal">Cancel</button>
+                <button class="btn" id="btn-confirm-log-wd" style="background: #f97316; color: #fff;">Submit Welding Schedule</button>
             </div>
         </div>
     </div>

@@ -1,5 +1,77 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
+    // AUTH & ROLE MANAGEMENT
+    // ----------------------------------------------------
+    let currentUserRole = localStorage.getItem('pure_role') || null;
+    let currentUsername = localStorage.getItem('pure_username') || null;
+
+    const loginModal = document.getElementById('login-modal');
+    const roleSelect = document.getElementById('login-role');
+    const passcodeGroup = document.getElementById('passcode-group');
+    const passcodeBtn = document.getElementById('btn-login-submit');
+
+    if (roleSelect) {
+        roleSelect.addEventListener('change', () => {
+            if (roleSelect.value === 'Manager') {
+                passcodeGroup.style.display = 'block';
+            } else {
+                passcodeGroup.style.display = 'none';
+            }
+        });
+    }
+
+    if (passcodeBtn) {
+        passcodeBtn.addEventListener('click', () => {
+            const role = document.getElementById('login-role').value;
+            const username = document.getElementById('login-username').value.trim() || 'User';
+            const passcode = document.getElementById('login-passcode').value.trim();
+
+            if (role === 'Manager' && passcode !== 'admin123') {
+                alert('Invalid Manager Passcode! (Default passcode: admin123)');
+                return;
+            }
+
+            currentUserRole = role;
+            currentUsername = username;
+            localStorage.setItem('pure_role', role);
+            localStorage.setItem('pure_username', username);
+
+            if (loginModal) loginModal.classList.remove('active');
+            updateUserDisplay();
+            refreshAll();
+        });
+    }
+
+    function updateUserDisplay() {
+        if (!currentUserRole) {
+            if (loginModal) loginModal.classList.add('active');
+            return;
+        }
+        if (loginModal) loginModal.classList.remove('active');
+
+        const roleBadge = document.getElementById('sidebar-role-badge');
+        const userDisplay = document.getElementById('logged-user-display');
+        if (roleBadge) {
+            roleBadge.innerText = currentUserRole === 'Manager' ? '👑 Manager Mode' : '👷 Operator Mode';
+            roleBadge.className = currentUserRole === 'Manager' ? 'badge' : 'badge 247-badge';
+            if (currentUserRole === 'Manager') roleBadge.style.background = '#8b5cf6';
+        }
+        if (userDisplay) {
+            userDisplay.innerText = `${currentUsername} (${currentUserRole})`;
+        }
+    }
+
+    document.getElementById('btn-logout').addEventListener('click', () => {
+        localStorage.removeItem('pure_role');
+        localStorage.removeItem('pure_username');
+        currentUserRole = null;
+        currentUsername = null;
+        if (loginModal) loginModal.classList.add('active');
+    });
+
+    updateUserDisplay();
+
+    // ----------------------------------------------------
     // MOBILE NAVIGATION TOGGLE
     // ----------------------------------------------------
     const mobileMenuBtn = document.getElementById('mobile-menu-btn');
@@ -130,19 +202,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const tbody = document.getElementById('pm-table-body');
             if (!tbody) return;
             if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No preventive maintenance logs found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No preventive maintenance logs found.</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.map(item => `
+            tbody.innerHTML = data.map(item => {
+                const statusHtml = renderStatusBadge(item.status);
+                const actionHtml = renderActionButtons(item);
+                return `
                 <tr>
                     <td><strong>${item.ticket_number}</strong></td>
                     <td><span class="badge 247-badge">${item.department}</span></td>
                     <td><strong>${item.equipment_id}</strong></td>
                     <td>${item.activity_description}</td>
+                    <td>${item.scheduled_time || 'As Scheduled'}</td>
+                    <td>${statusHtml}</td>
                     <td>${item.technician}</td>
-                    <td>${item.performed_at.slice(0, 16).replace('T', ' ')}</td>
+                    <td>${actionHtml}</td>
                 </tr>
-            `).join('');
+            `}).join('');
+
+            bindApprovalEvents();
         } catch (err) {
             console.error('Error loading PM:', err);
         }
@@ -155,23 +234,63 @@ document.addEventListener('DOMContentLoaded', () => {
             const tbody = document.getElementById('welding-table-body');
             if (!tbody) return;
             if (!data.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No welding logs found.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No welding logs found.</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.map(item => `
+            tbody.innerHTML = data.map(item => {
+                const statusHtml = renderStatusBadge(item.status);
+                const actionHtml = renderActionButtons(item);
+                return `
                 <tr>
                     <td><strong>${item.ticket_number}</strong></td>
                     <td><span class="badge 247-badge">${item.department || item.location || 'General'}</span></td>
                     <td><strong>${item.equipment_id}</strong></td>
                     <td>${item.welding_details}</td>
                     <td>${item.scheduled_time || 'As Scheduled'}</td>
-                    <td><span class="badge ${item.status === 'OPEN' ? 'status-open' : 'status-resolved'}">${item.status}</span></td>
+                    <td>${statusHtml}</td>
                     <td>${item.technician || item.sender_name}</td>
+                    <td>${actionHtml}</td>
                 </tr>
-            `).join('');
+            `}).join('');
+
+            bindApprovalEvents();
         } catch (err) {
             console.error('Error loading welding logs:', err);
         }
+    }
+
+    function renderStatusBadge(status) {
+        if (status === 'PENDING_APPROVAL') {
+            return `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b;">⏳ PENDING APPROVAL</span>`;
+        }
+        if (status === 'APPROVED' || status === 'OPEN') {
+            return `<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid #3b82f6;">⚡ APPROVED / OPEN</span>`;
+        }
+        if (status === 'RESOLVED') {
+            return `<span class="badge status-resolved">✅ RESOLVED</span>`;
+        }
+        if (status === 'REJECTED') {
+            return `<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid #ef4444;">❌ REJECTED</span>`;
+        }
+        return `<span class="badge status-open">${status}</span>`;
+    }
+
+    function renderActionButtons(item) {
+        const isResolved = item.status === 'RESOLVED' || item.status === 'REJECTED';
+        const isPending = item.status === 'PENDING_APPROVAL';
+
+        if (isResolved) {
+            return `<button class="btn btn-sm btn-outline" disabled>Closed</button>`;
+        }
+
+        if (currentUserRole === 'Manager' && isPending) {
+            return `
+                <button class="btn btn-sm btn-emerald btn-approve-action" data-ticket="${item.ticket_number}" style="margin-right:4px;">Approve</button>
+                <button class="btn btn-sm btn-outline btn-reject-action" data-ticket="${item.ticket_number}" style="border-color:#ef4444;color:#ef4444;">Reject</button>
+            `;
+        }
+
+        return `<button class="btn btn-sm btn-emerald btn-resolve-action" data-ticket="${item.ticket_number}" data-eq="${item.equipment_id}">Resolve</button>`;
     }
 
     function renderBreakdownsTable(data) {
@@ -188,7 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             let matchesStatus = true;
-            if (filterVal === 'OPEN') matchesStatus = (item.status === 'OPEN');
+            if (filterVal === 'PENDING_APPROVAL') matchesStatus = (item.status === 'PENDING_APPROVAL');
+            if (filterVal === 'OPEN') matchesStatus = (item.status === 'OPEN' || item.status === 'APPROVED');
             if (filterVal === 'RESOLVED') matchesStatus = (item.status === 'RESOLVED');
 
             return matchesSearch && matchesStatus;
@@ -200,16 +320,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tbody.innerHTML = filtered.map(item => {
-            const isResolved = item.status === 'RESOLVED';
-            const statusBadge = isResolved
-                ? `<span class="badge status-resolved">RESOLVED</span>`
-                : `<span class="badge status-open">OPEN</span>`;
-
-            const actionBtn = isResolved
-                ? `<button class="btn btn-sm btn-outline" disabled>Closed</button>`
-                : `<button class="btn btn-sm btn-emerald btn-resolve-action" data-ticket="${item.ticket_number}" data-eq="${item.equipment_id}">Resolve</button>`;
-
-            const durationStr = isResolved ? `${item.duration_minutes} mins` : '-';
+            const statusHtml = renderStatusBadge(item.status);
+            const actionHtml = renderActionButtons(item);
+            const durationStr = item.status === 'RESOLVED' ? `${item.duration_minutes} mins` : '-';
             const endTimeStr = item.end_time ? item.end_time.slice(0, 16).replace('T', ' ') : '-';
 
             return `
@@ -218,20 +331,53 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><span class="badge 247-badge">${item.department}</span></td>
                     <td><strong>${item.equipment_id}</strong></td>
                     <td>${item.issue_description}</td>
-                    <td>${statusBadge}</td>
+                    <td>${statusHtml}</td>
                     <td>${item.start_time.slice(0, 16).replace('T', ' ')}</td>
                     <td>${endTimeStr}</td>
                     <td>${durationStr}</td>
-                    <td>${actionBtn}</td>
+                    <td>${actionHtml}</td>
                 </tr>
             `;
         }).join('');
 
+        bindApprovalEvents();
+    }
+
+    function bindApprovalEvents() {
         document.querySelectorAll('.btn-resolve-action').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const ticket = e.target.getAttribute('data-ticket');
                 const eq = e.target.getAttribute('data-eq');
                 openResolveModal(ticket, eq);
+            });
+        });
+
+        document.querySelectorAll('.btn-approve-action').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const ticket = e.target.getAttribute('data-ticket');
+                try {
+                    await fetch('/api/ticket/approve', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername })
+                    });
+                    refreshAll();
+                } catch (err) { console.error(err); }
+            });
+        });
+
+        document.querySelectorAll('.btn-reject-action').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const ticket = e.target.getAttribute('data-ticket');
+                const reason = prompt("Enter rejection reason (optional):", "Scope out of bounds");
+                try {
+                    await fetch('/api/ticket/reject', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || '' })
+                    });
+                    refreshAll();
+                } catch (err) { console.error(err); }
             });
         });
     }
@@ -251,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentResolveEq = eq;
         document.getElementById('modal-ticket-info').innerText = `Closing Ticket: ${ticket} (${eq})`;
         document.getElementById('modal-resolution').value = '';
-        document.getElementById('modal-tech').value = '';
+        document.getElementById('modal-tech').value = currentUsername || '';
         if (resolveModal) resolveModal.classList.add('active');
     }
 
@@ -279,7 +425,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ticket_number: currentResolveTicket,
                         equipment_id: currentResolveEq,
                         resolution_notes: notes,
-                        technician: tech || 'Web Portal User'
+                        technician: tech || currentUsername || 'Technician'
                     })
                 });
 
@@ -329,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         department: plant,
                         equipment_id: eq,
                         issue_description: issue,
-                        sender_name: 'Web Portal User'
+                        sender_name: currentUsername || 'Portal User'
                     })
                 });
                 if (bdModal) bdModal.classList.remove('active');
@@ -337,6 +483,102 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) {
                 console.error(e);
             }
+        });
+    }
+
+    // Schedule PM Modal
+    const pmModal = document.getElementById('modal-log-pm');
+    if (document.getElementById('btn-schedule-pm')) {
+        document.getElementById('btn-schedule-pm').addEventListener('click', () => {
+            document.getElementById('modal-pm-eq').value = '';
+            document.getElementById('modal-pm-desc').value = '';
+            document.getElementById('modal-pm-tech').value = currentUsername || '';
+            if (pmModal) pmModal.classList.add('active');
+        });
+    }
+
+    if (document.getElementById('btn-close-pm-modal')) {
+        document.getElementById('btn-close-pm-modal').addEventListener('click', () => {
+            if (pmModal) pmModal.classList.remove('active');
+        });
+    }
+
+    if (document.getElementById('btn-confirm-log-pm')) {
+        document.getElementById('btn-confirm-log-pm').addEventListener('click', async () => {
+            const plant = document.getElementById('modal-pm-plant').value;
+            const eq = document.getElementById('modal-pm-eq').value.trim();
+            const desc = document.getElementById('modal-pm-desc').value.trim();
+            const time = document.getElementById('modal-pm-time').value.trim();
+            const tech = document.getElementById('modal-pm-tech').value.trim();
+
+            if (!eq || !desc) {
+                alert('Please enter equipment ID and PM activity description.');
+                return;
+            }
+
+            try {
+                await fetch('/api/pm/log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        department: plant,
+                        equipment_id: eq,
+                        activity_description: desc,
+                        scheduled_time: time || 'Tomorrow 10 AM',
+                        technician: tech || currentUsername || 'Tech'
+                    })
+                });
+                if (pmModal) pmModal.classList.remove('active');
+                refreshAll();
+            } catch (e) { console.error(e); }
+        });
+    }
+
+    // Schedule Welding Modal
+    const wdModal = document.getElementById('modal-log-welding');
+    if (document.getElementById('btn-schedule-welding')) {
+        document.getElementById('btn-schedule-welding').addEventListener('click', () => {
+            document.getElementById('modal-wd-eq').value = '';
+            document.getElementById('modal-wd-details').value = '';
+            document.getElementById('modal-wd-tech').value = currentUsername || '';
+            if (wdModal) wdModal.classList.add('active');
+        });
+    }
+
+    if (document.getElementById('btn-close-wd-modal')) {
+        document.getElementById('btn-close-wd-modal').addEventListener('click', () => {
+            if (wdModal) wdModal.classList.remove('active');
+        });
+    }
+
+    if (document.getElementById('btn-confirm-log-wd')) {
+        document.getElementById('btn-confirm-log-wd').addEventListener('click', async () => {
+            const plant = document.getElementById('modal-wd-plant').value;
+            const eq = document.getElementById('modal-wd-eq').value.trim();
+            const details = document.getElementById('modal-wd-details').value.trim();
+            const time = document.getElementById('modal-wd-time').value.trim();
+            const tech = document.getElementById('modal-wd-tech').value.trim();
+
+            if (!eq || !details) {
+                alert('Please enter equipment/structure name and welding work details.');
+                return;
+            }
+
+            try {
+                await fetch('/api/welding/log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        department: plant,
+                        equipment_id: eq,
+                        welding_details: details,
+                        scheduled_time: time || 'Today 3 PM',
+                        technician: tech || currentUsername || 'Welder'
+                    })
+                });
+                if (wdModal) wdModal.classList.remove('active');
+                refreshAll();
+            } catch (e) { console.error(e); }
         });
     }
 
