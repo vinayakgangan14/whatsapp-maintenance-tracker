@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WhatsApp Maintenance & Breakdown Agent</title>
+    <title>Pure Maintenance & Breakdown Management Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -16,10 +16,10 @@
         <aside class="sidebar">
             <div class="brand">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div class="brand-icon">🤖</div>
+                    <div class="brand-icon">🛠️</div>
                     <div class="brand-text">
-                        <h2>Pure Bot</h2>
-                        <span class="badge 247-badge">Maintenance 24/7</span>
+                        <h2>Pure Portal</h2>
+                        <span class="badge 247-badge">Maintenance Suite</span>
                     </div>
                 </div>
                 <button class="mobile-toggle-btn" id="mobile-menu-btn">☰</button>
@@ -27,10 +27,7 @@
 
             <nav class="nav-menu">
                 <button class="nav-item active" data-tab="tab-overview">
-                    <span class="nav-icon">📊</span> Overview & MTTR
-                </button>
-                <button class="nav-item" data-tab="tab-qr">
-                    <span class="nav-icon">📱</span> WhatsApp QR Connect (Free)
+                    <span class="nav-icon">📊</span> Overview & Analytics
                 </button>
                 <button class="nav-item" data-tab="tab-breakdowns">
                     <span class="nav-icon">🚨</span> Breakdown Logs
@@ -38,23 +35,22 @@
                 <button class="nav-item" data-tab="tab-pm">
                     <span class="nav-icon">⚙️</span> Preventive Maint
                 </button>
-
-                <button class="nav-item" data-tab="tab-simulator">
-                    <span class="nav-icon">💬</span> WhatsApp Simulator
+                <button class="nav-item" data-tab="tab-welding">
+                    <span class="nav-icon">🔥</span> Welding Work Logs
                 </button>
                 <button class="nav-item" data-tab="tab-sheets">
                     <span class="nav-icon">📗</span> Sheets & Excel Sync
                 </button>
                 <button class="nav-item" data-tab="tab-settings">
-                    <span class="nav-icon">⚙️</span> Integration Settings
+                    <span class="nav-icon">⚙️</span> Settings & Handover
                 </button>
             </nav>
 
             <div class="server-status">
                 <div class="status-indicator online"></div>
                 <div class="status-text">
-                    <strong>Cloud Agent Active</strong>
-                    <small>Listening for WhatsApp Webhooks</small>
+                    <strong>System Active</strong>
+                    <small>Real-time Google Sheets Sync</small>
                 </div>
             </div>
         </aside>
@@ -64,20 +60,20 @@
             <!-- Top Navbar -->
             <header class="top-header">
                 <div class="header-title">
-                    <h1 id="page-title">Pure Bot for Maintenance and Repair</h1>
-                    <p class="subtitle">Multi-department WhatsApp breakdown reporting and Google Sheets logging system</p>
+                    <h1 id="page-title">Pure Maintenance & Breakdown Portal</h1>
+                    <p class="subtitle">Multi-plant breakdown reporting, MTTR/MTBF analytics, and Google Sheets live logging</p>
                 </div>
                 <div class="header-actions">
                     <button class="btn btn-emerald" id="btn-quick-log">
                         <span>+ Report Breakdown</span>
                     </button>
-                    <a href="/api/export/excel" class="btn btn-outline" target="_blank">
+                    <a href="/api/export/excel" class="btn btn-outline" id="btn-export-excel">
                         <span>📥 Export Excel (.xlsx)</span>
                     </a>
                 </div>
             </header>
 
-            <!-- TAB 1: OVERVIEW & MTTR -->
+            <!-- TAB 1: OVERVIEW & MTTR / MTBF -->
             <section id="tab-overview" class="tab-pane active">
                 <!-- KPI Grid -->
                 <div class="kpi-grid">
@@ -131,7 +127,7 @@
                 <div class="charts-grid">
                     <div class="glass-card">
                         <div class="card-header">
-                            <h3>Department Breakdown Distribution</h3>
+                            <h3>Plant / Department Breakdown Distribution</h3>
                         </div>
                         <div class="chart-container">
                             <canvas id="chartDepartment"></canvas>
@@ -149,44 +145,12 @@
                 </div>
             </section>
 
-            <!-- TAB: WHATSAPP QR CONNECT (100% FREE) -->
-            <section id="tab-qr" class="tab-pane">
-                <div class="glass-card" style="max-width: 680px; margin: 0 auto; text-align: center;">
-                    <h2>📱 Scan WhatsApp QR Code (100% FREE)</h2>
-                    <p class="text-muted" style="margin-top: 0.5rem;">Connect any standard WhatsApp or WhatsApp Business phone number without Meta API fees, OTPs, or credit cards.</p>
-
-                    <div style="margin: 1.5rem 0; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: var(--radius-md); display: inline-block;">
-                        <div id="qr-container" style="min-height: 240px; display: flex; align-items: center; justify-content: center; flex-direction: column;">
-                            <div id="qr-loading-text" class="text-muted">Click below to generate WhatsApp Web QR code...</div>
-                            <img id="qr-code-img" style="display: none; width: 240px; height: 240px; border-radius: 12px; border: 4px solid #fff; margin: 0 auto;">
-                        </div>
-                        <div id="qr-status-badge" class="badge" style="margin-top: 1rem; font-size: 0.9rem; padding: 6px 16px; background: rgba(255,255,255,0.1); color: #fff;">
-                            Status: Disconnected
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom: 1.5rem;">
-                        <button class="btn btn-emerald" id="btn-start-qr">Generate / Reset QR Code</button>
-                    </div>
-
-                    <div class="glass-card" style="text-align: left; background: rgba(255,255,255,0.02);">
-                        <h4 style="margin-bottom: 0.75rem;">📋 How to Connect in 30 Seconds:</h4>
-                        <ol style="margin-left: 1.25rem; line-height: 1.8; color: var(--text-muted); font-size: 0.9rem;">
-                            <li>Open <b>WhatsApp</b> on your phone.</li>
-                            <li>Tap <b>Menu</b> (⋮ or ⚙️ Settings) -> <b>Linked Devices</b>.</li>
-                            <li>Tap <b>Link a Device</b>.</li>
-                            <li>Scan the QR code above! Your cloud agent will connect instantly.</li>
-                        </ol>
-                    </div>
-                </div>
-            </section>
-
             <!-- TAB 2: BREAKDOWN LOGS TABLE -->
             <section id="tab-breakdowns" class="tab-pane">
                 <div class="glass-card">
                     <div class="table-toolbar">
                         <div class="search-box">
-                            <input type="text" id="table-search" placeholder="Search equipment, ticket, issue, or department...">
+                            <input type="text" id="table-search" placeholder="Search equipment, ticket, issue, or plant...">
                         </div>
                         <div class="filter-group">
                             <select id="status-filter">
@@ -202,7 +166,7 @@
                             <thead>
                                 <tr>
                                     <th>Ticket #</th>
-                                    <th>Department</th>
+                                    <th>Plant / Dept</th>
                                     <th>Equipment ID</th>
                                     <th>Issue Description</th>
                                     <th>Status</th>
@@ -231,7 +195,7 @@
                             <thead>
                                 <tr>
                                     <th>Ticket #</th>
-                                    <th>Department</th>
+                                    <th>Plant / Dept</th>
                                     <th>Equipment ID</th>
                                     <th>Activity Description</th>
                                     <th>Technician</th>
@@ -246,60 +210,29 @@
                 </div>
             </section>
 
-            <!-- TAB 4: WHATSAPP SIMULATOR -->
-            <section id="tab-simulator" class="tab-pane">
-                <div class="simulator-layout">
-                    <div class="phone-frame">
-                        <div class="phone-header">
-                            <div class="phone-avatar">🤖</div>
-                            <div class="phone-contact">
-                                <strong>Pure Bot for Maintenance and Repair</strong>
-                                <small>Online 24/7 (Department Central)</small>
-                            </div>
-                        </div>
-
-                        <div class="phone-messages" id="chat-messages">
-                            <div class="msg msg-received">
-                                👋 Welcome to <b>Pure Bot for Maintenance and Repair</b>!<br><br>
-                                Simple 1-Touch Commands:<br>
-                                <code>1 Press 3 Oil leak</code> (Report Breakdown)<br>
-                                <code>2 Press 3 Fixed</code> (Report Repair Done)<br>
-                                <code>3 Press 3 Service</code> (Log Service)<br>
-                                <code>4</code> (Check Active)<br>
-                                <code>5</code> (View Stats)
-                            </div>
-                        </div>
-
-                        <div class="phone-input-bar">
-                            <input type="text" id="sim-input" placeholder="Type WhatsApp message (e.g. 1 Press 3 Leak)...">
-                            <button id="sim-send-btn">Send</button>
-                        </div>
+            <!-- TAB 4: WELDING WORK LOGS -->
+            <section id="tab-welding" class="tab-pane">
+                <div class="glass-card">
+                    <div class="card-header">
+                        <h3>Scheduled Welding & Fabrication Work Log</h3>
                     </div>
-
-                    <div class="simulator-sidebar glass-card">
-                        <h3>1-Touch Quick Simulator</h3>
-                        <p class="text-muted">Click a quick template to test Pure Bot logic:</p>
-                        
-                        <div class="sim-presets">
-                            <button class="preset-btn" data-msg="1 Press 3 Spindle motor overheating">
-                                🚨 1 Press 3 Overheating (Report Breakdown)
-                            </button>
-                            <button class="preset-btn" data-msg="1 Chiller 1 Water pressure low">
-                                🚨 1 Chiller 1 Low Pressure (Report Breakdown)
-                            </button>
-                            <button class="preset-btn" data-msg="2 Press 3 Fixed">
-                                ✅ 2 Press 3 Fixed (Report Repaired)
-                            </button>
-                            <button class="preset-btn" data-msg="3 Air Compressor Monthly filter service">
-                                🛠️ 3 Compressor Service (Log PM)
-                            </button>
-                            <button class="preset-btn" data-msg="4">
-                                📌 4 (Check Active Open Tickets)
-                            </button>
-                            <button class="preset-btn" data-msg="5">
-                                📊 5 (View Downtime & MTTR Stats)
-                            </button>
-                        </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Ticket #</th>
+                                    <th>Plant / Location</th>
+                                    <th>Equipment / Structure</th>
+                                    <th>Welding Details</th>
+                                    <th>Scheduled Time</th>
+                                    <th>Status</th>
+                                    <th>Technician</th>
+                                </tr>
+                            </thead>
+                            <tbody id="welding-table-body">
+                                <tr><td colspan="7" class="text-center">Loading Welding records...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -308,7 +241,7 @@
             <section id="tab-sheets" class="tab-pane">
                 <div class="glass-card">
                     <h3>Google Sheets Live Sync Configuration</h3>
-                    <p class="text-muted">Your WhatsApp tracking agent automatically streams every breakdown and resolution event to a cloud Google Sheet in real-time.</p>
+                    <p class="text-muted">Every breakdown and resolution event automatically streams to your cloud Google Sheet in real-time.</p>
 
                     <div class="form-grid">
                         <div class="form-group">
@@ -323,10 +256,10 @@
                         </div>
 
                         <div class="form-group span-2">
-                            <label>Google Service Account Credentials JSON</label>
+                            <label>Google Service Account Credentials Status</label>
                             <div class="file-drop-zone" id="json-dropzone">
                                 <input type="file" id="json-file-input" accept=".json">
-                                <p id="json-status-text">📄 Drop your Google Service Account <code>service_account.json</code> here or click to browse</p>
+                                <p id="json-status-text">📄 Google Service Account credentials status checking...</p>
                             </div>
                         </div>
                     </div>
@@ -336,30 +269,9 @@
                 </div>
             </section>
 
-            <!-- TAB 6: SETTINGS -->
+            <!-- TAB 6: SETTINGS & HANDOVER -->
             <section id="tab-settings" class="tab-pane">
-                <div class="glass-card">
-                    <h3>Meta WhatsApp Business API Credentials</h3>
-                    <p class="text-muted">Configure Meta Cloud API or Twilio credentials for official 24/7 WhatsApp Webhooks.</p>
-
-                    <div class="form-grid">
-                        <div class="form-group span-2">
-                            <label>Meta WhatsApp Permanent Access Token</label>
-                            <input type="password" id="cfg-meta-token" placeholder="EAAG...">
-                        </div>
-                        <div class="form-group">
-                            <label>Phone Number ID</label>
-                            <input type="text" id="cfg-phone-id" placeholder="109283746554...">
-                        </div>
-                        <div class="form-group">
-                            <label>Webhook Verification Token</label>
-                            <input type="text" id="cfg-verify-token" value="antigravity_verify_123">
-                        </div>
-                    </div>
-                    <button class="btn btn-primary" id="btn-save-meta">Save WhatsApp Settings</button>
-                </div>
-
-                <div class="glass-card" style="margin-top: 1.5rem; border-left: 4px solid #ef4444;">
+                <div class="glass-card" style="border-left: 4px solid #ef4444;">
                     <h3>🧹 Client Handover — Clear All Test Data</h3>
                     <p class="text-muted">Use this option when handing over the system to a client. It clears all test breakdown tickets, PM logs, and welding logs for a fresh start.</p>
                     <button class="btn" id="btn-reset-db" style="background: #dc2626; color: #fff; margin-top: 0.5rem;">🧹 Clear All Records (Fresh Start)</button>

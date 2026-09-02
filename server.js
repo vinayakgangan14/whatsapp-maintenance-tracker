@@ -3,7 +3,6 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
-const baileysService = require('./baileysService');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,28 +49,7 @@ function runPythonCode(pythonCode) {
     });
 }
 
-// ---------------------------------------------------
-// BAILEYS QR CODE ENDPOINTS
-// ---------------------------------------------------
-app.get('/api/baileys/status', (req, res) => {
-    res.json(baileysService.getBaileysStatus());
-});
-
-app.post('/api/baileys/start', (req, res) => {
-    baileysService.startBaileysEngine(async (text, phone, name) => {
-        const code = `
-import parser, database, json
-database.init_db()
-reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(text)}, ${JSON.stringify(phone)}, ${JSON.stringify(name)})
-print(json.dumps({"reply": reply}))
-        `;
-        const resObj = await runPythonCode(code);
-        return resObj.reply || "✅ Report received and logged.";
-    });
-    res.json({ message: "Baileys engine starting..." });
-});
-
-// Proxy stats, breakdowns, maintenance to Python Database engine
+// Proxy stats, breakdowns, maintenance, welding to Python Database engine
 app.get('/api/stats', async (req, res) => {
     const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_statistics()))');
     res.json(data.raw ? {} : data);
@@ -159,7 +137,7 @@ ticket, bd_id = database.log_breakdown(
     department=${JSON.stringify(department || 'General')},
     equipment_id=${JSON.stringify(equipment_id)},
     issue_description=${JSON.stringify(issue_description)},
-    sender_name=${JSON.stringify(sender_name || 'Web Admin')}
+    sender_name=${JSON.stringify(sender_name || 'Web Portal User')}
 )
 open_bds = database.get_open_breakdowns()
 matching = [b for b in open_bds if b['ticket_number'] == ticket]
@@ -174,7 +152,6 @@ print(json.dumps({"ticket": ticket, "id": bd_id}))
 app.post('/api/breakdowns/resolve', async (req, res) => {
     const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
 
-    // Build Python-safe values (None vs quoted string)
     const pyTicket   = ticket_number   ? JSON.stringify(ticket_number)   : 'None';
     const pyEquip    = equipment_id    ? JSON.stringify(equipment_id)    : 'None';
     const pyNotes    = JSON.stringify(resolution_notes || 'Fixed manually via dashboard');
@@ -201,22 +178,6 @@ print(json.dumps({"updated": updated, "err": err}))
         return res.status(400).json({ detail: data.err });
     }
     res.json({ message: "Breakdown resolved successfully", record: data.updated });
-});
-
-app.post('/api/simulator/send', async (req, res) => {
-    const { message, sender_name, department } = req.body;
-    let fullMsg = message || '';
-    if (department && !fullMsg.includes('[') && !fullMsg.toLowerCase().includes('dept')) {
-        fullMsg = `[${department}] ${fullMsg}`;
-    }
-    const code = `
-import parser, database, json
-database.init_db()
-reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(fullMsg)}, "+1234567890", ${JSON.stringify(sender_name || 'Simulator User')})
-print(json.dumps({"reply": reply, "action_type": action, "stats": database.get_statistics()}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data.reply ? data : { reply: "✅ Logged in system." });
 });
 
 app.get('/api/export/excel', (req, res) => {
@@ -259,25 +220,13 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
-// Auto-start Baileys engine on startup
-baileysService.startBaileysEngine(async (text, phone, name) => {
-    const code = `
-import parser, database, json
-database.init_db()
-reply, action, details = parser.parse_whatsapp_message(${JSON.stringify(text)}, ${JSON.stringify(phone)}, ${JSON.stringify(name)})
-print(json.dumps({"reply": reply}))
-    `;
-    const resObj = await runPythonCode(code);
-    return resObj.reply || "✅ Report received and logged.";
-});
-
 app.listen(PORT, async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🚀 Maintenance Portal running on port ${PORT}`);
     // Restore database from Google Sheets on startup if empty
     try {
         await runPythonCode('import google_sheets; google_sheets.restore_database_from_sheets()');
-        console.log('[Pure Bot] Startup database restore completed.');
+        console.log('[Pure Portal] Startup database restore completed.');
     } catch (e) {
-        console.error('[Pure Bot] Database restore skipped:', e);
+        console.error('[Pure Portal] Database restore skipped:', e);
     }
 });

@@ -28,7 +28,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetElement = document.getElementById(targetTab);
             if (targetElement) targetElement.classList.add('active');
 
-            // Close mobile menu when a tab is selected
             if (sidebar) sidebar.classList.remove('mobile-open');
         });
     });
@@ -40,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let ratioChart = null;
 
     function initCharts(stats) {
-        // Department Doughnut Chart
         const deptCtx = document.getElementById('chartDepartment').getContext('2d');
         const deptLabels = Object.keys(stats.department_distribution || {});
         const deptData = Object.values(stats.department_distribution || {});
@@ -65,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Ratio Bar Chart
         const ratioCtx = document.getElementById('chartRatio').getContext('2d');
         if (ratioChart) ratioChart.destroy();
         ratioChart = new Chart(ratioCtx, {
@@ -131,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/maintenance');
             const data = await res.json();
             const tbody = document.getElementById('pm-table-body');
+            if (!tbody) return;
             if (!data.length) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center">No preventive maintenance logs found.</td></tr>';
                 return;
@@ -150,41 +148,69 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    let rawBreakdowns = [];
-
-    function renderBreakdownsTable(data) {
-        rawBreakdowns = data;
-        filterAndRenderTable();
+    async function loadWelding() {
+        try {
+            const res = await fetch('/api/welding');
+            const data = await res.json();
+            const tbody = document.getElementById('welding-table-body');
+            if (!tbody) return;
+            if (!data.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No welding logs found.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.map(item => `
+                <tr>
+                    <td><strong>${item.ticket_number}</strong></td>
+                    <td><span class="badge 247-badge">${item.department || item.location || 'General'}</span></td>
+                    <td><strong>${item.equipment_id}</strong></td>
+                    <td>${item.welding_details}</td>
+                    <td>${item.scheduled_time || 'As Scheduled'}</td>
+                    <td><span class="badge ${item.status === 'OPEN' ? 'status-open' : 'status-resolved'}">${item.status}</span></td>
+                    <td>${item.technician || item.sender_name}</td>
+                </tr>
+            `).join('');
+        } catch (err) {
+            console.error('Error loading welding logs:', err);
+        }
     }
 
-    function filterAndRenderTable() {
-        const search = document.getElementById('table-search').value.toLowerCase();
-        const status = document.getElementById('status-filter').value;
+    function renderBreakdownsTable(data) {
         const tbody = document.getElementById('breakdowns-table-body');
+        const searchVal = document.getElementById('table-search').value.toLowerCase();
+        const filterVal = document.getElementById('status-filter').value;
 
-        const filtered = rawBreakdowns.filter(item => {
-            const matchesSearch = item.equipment_id.toLowerCase().includes(search) ||
-                                  item.ticket_number.toLowerCase().includes(search) ||
-                                  item.department.toLowerCase().includes(search) ||
-                                  item.issue_description.toLowerCase().includes(search);
-            const matchesStatus = status === 'ALL' || item.status === status;
+        const filtered = data.filter(item => {
+            const matchesSearch = (
+                item.ticket_number.toLowerCase().includes(searchVal) ||
+                item.equipment_id.toLowerCase().includes(searchVal) ||
+                item.issue_description.toLowerCase().includes(searchVal) ||
+                item.department.toLowerCase().includes(searchVal)
+            );
+
+            let matchesStatus = true;
+            if (filterVal === 'OPEN') matchesStatus = (item.status === 'OPEN');
+            if (filterVal === 'RESOLVED') matchesStatus = (item.status === 'RESOLVED');
+
             return matchesSearch && matchesStatus;
         });
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">No breakdown records match criteria.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">No breakdowns matching filter.</td></tr>';
             return;
         }
 
         tbody.innerHTML = filtered.map(item => {
             const isResolved = item.status === 'RESOLVED';
-            const actionBtn = isResolved 
-                ? '<span class="text-success" style="font-size: 0.8rem">Resolved</span>'
-                : `<button class="btn btn-emerald btn-resolve-row" data-ticket="${item.ticket_number}" data-eq="${item.equipment_id}" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">Resolve</button>`;
+            const statusBadge = isResolved
+                ? `<span class="badge status-resolved">RESOLVED</span>`
+                : `<span class="badge status-open">OPEN</span>`;
 
-            const durationStr = isResolved 
-                ? `${item.duration_minutes} mins` 
-                : '<span class="text-danger">Active Down</span>';
+            const actionBtn = isResolved
+                ? `<button class="btn btn-sm btn-outline" disabled>Closed</button>`
+                : `<button class="btn btn-sm btn-emerald btn-resolve-action" data-ticket="${item.ticket_number}" data-eq="${item.equipment_id}">Resolve</button>`;
+
+            const durationStr = isResolved ? `${item.duration_minutes} mins` : '-';
+            const endTimeStr = item.end_time ? item.end_time.slice(0, 16).replace('T', ' ') : '-';
 
             return `
                 <tr>
@@ -192,76 +218,83 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><span class="badge 247-badge">${item.department}</span></td>
                     <td><strong>${item.equipment_id}</strong></td>
                     <td>${item.issue_description}</td>
-                    <td><span class="status-pill ${item.status}">${item.status}</span></td>
+                    <td>${statusBadge}</td>
                     <td>${item.start_time.slice(0, 16).replace('T', ' ')}</td>
-                    <td>${item.end_time ? item.end_time.slice(0, 16).replace('T', ' ') : '-'}</td>
+                    <td>${endTimeStr}</td>
                     <td>${durationStr}</td>
                     <td>${actionBtn}</td>
                 </tr>
             `;
         }).join('');
 
-        // Attach event listeners to Resolve buttons
-        document.querySelectorAll('.btn-resolve-row').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const ticket = btn.getAttribute('data-ticket');
-                const eq = btn.getAttribute('data-eq');
+        document.querySelectorAll('.btn-resolve-action').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticket = e.target.getAttribute('data-ticket');
+                const eq = e.target.getAttribute('data-eq');
                 openResolveModal(ticket, eq);
             });
         });
     }
 
-    document.getElementById('table-search').addEventListener('input', filterAndRenderTable);
-    document.getElementById('status-filter').addEventListener('change', filterAndRenderTable);
+    document.getElementById('table-search').addEventListener('input', () => loadBreakdowns());
+    document.getElementById('status-filter').addEventListener('change', () => loadBreakdowns());
 
     // ----------------------------------------------------
-    // RESOLVE MODAL
+    // MODALS HANDLING
     // ----------------------------------------------------
-    const modal = document.getElementById('modal-resolve');
+    const resolveModal = document.getElementById('modal-resolve');
     let currentResolveTicket = null;
+    let currentResolveEq = null;
 
     function openResolveModal(ticket, eq) {
         currentResolveTicket = ticket;
-        document.getElementById('modal-ticket-info').innerText = `Resolving Breakdown Ticket ${ticket} (${eq})`;
+        currentResolveEq = eq;
+        document.getElementById('modal-ticket-info').innerText = `Closing Ticket: ${ticket} (${eq})`;
         document.getElementById('modal-resolution').value = '';
-        modal.classList.add('active');
+        document.getElementById('modal-tech').value = '';
+        if (resolveModal) resolveModal.classList.add('active');
     }
 
-    document.getElementById('btn-close-modal').addEventListener('click', () => {
-        modal.classList.remove('active');
-    });
+    if (document.getElementById('btn-close-modal')) {
+        document.getElementById('btn-close-modal').addEventListener('click', () => {
+            if (resolveModal) resolveModal.classList.remove('active');
+        });
+    }
 
-    document.getElementById('btn-confirm-resolve').addEventListener('click', async () => {
-        const resolution = document.getElementById('modal-resolution').value.trim();
-        const tech = document.getElementById('modal-tech').value.trim() || 'Technician';
+    if (document.getElementById('btn-confirm-resolve')) {
+        document.getElementById('btn-confirm-resolve').addEventListener('click', async () => {
+            const notes = document.getElementById('modal-resolution').value.trim();
+            const tech = document.getElementById('modal-tech').value.trim();
 
-        if (!resolution) {
-            alert('Please enter resolution notes.');
-            return;
-        }
-
-        try {
-            const res = await fetch('/api/breakdowns/resolve', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ticket_number: currentResolveTicket,
-                    resolution_notes: resolution,
-                    technician: tech
-                })
-            });
-
-            if (res.ok) {
-                modal.classList.remove('active');
-                refreshAll();
-            } else {
-                const err = await res.json();
-                alert(err.detail || 'Error resolving breakdown');
+            if (!notes) {
+                alert('Please enter resolution notes.');
+                return;
             }
-        } catch (e) {
-            console.error(e);
-        }
-    });
+
+            try {
+                const res = await fetch('/api/breakdowns/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticket_number: currentResolveTicket,
+                        equipment_id: currentResolveEq,
+                        resolution_notes: notes,
+                        technician: tech || 'Web Portal User'
+                    })
+                });
+
+                if (res.ok) {
+                    if (resolveModal) resolveModal.classList.remove('active');
+                    refreshAll();
+                } else {
+                    const errData = await res.json();
+                    alert('Error: ' + (errData.detail || 'Could not resolve ticket'));
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    }
 
     // Quick Log Breakdown Modal
     const bdModal = document.getElementById('modal-log-bd');
@@ -295,7 +328,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({
                         department: plant,
                         equipment_id: eq,
-                        issue_description: issue
+                        issue_description: issue,
+                        sender_name: 'Web Portal User'
                     })
                 });
                 if (bdModal) bdModal.classList.remove('active');
@@ -307,61 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ----------------------------------------------------
-    // WHATSAPP SIMULATOR LOGIC
-    // ----------------------------------------------------
-    const simInput = document.getElementById('sim-input');
-    const simSendBtn = document.getElementById('sim-send-btn');
-    const chatMessages = document.getElementById('chat-messages');
-
-    async function sendSimulatedMessage(text) {
-        if (!text.trim()) return;
-
-        // Append user bubble
-        appendChatBubble(text, 'sent');
-        simInput.value = '';
-
-        try {
-            const res = await fetch('/api/simulator/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: text,
-                    department: 'Production',
-                    sender_name: 'Shift Supervisor'
-                })
-            });
-
-            const data = await res.json();
-            // Append WhatsApp bot reply
-            appendChatBubble(data.reply.replace(/\*(.*?)\*/g, '<b>$1</b>'), 'received');
-            refreshAll();
-        } catch (err) {
-            appendChatBubble('⚠️ Error connecting to server backend.', 'received');
-        }
-    }
-
-    function appendChatBubble(htmlContent, type) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `msg msg-${type}`;
-        msgDiv.innerHTML = htmlContent.replace(/\n/g, '<br>');
-        chatMessages.appendChild(msgDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    simSendBtn.addEventListener('click', () => sendSimulatedMessage(simInput.value));
-    simInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendSimulatedMessage(simInput.value);
-    });
-
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const msg = btn.getAttribute('data-msg');
-            sendSimulatedMessage(msg);
-        });
-    });
-
-    // ----------------------------------------------------
-    // SETTINGS LOGIC
+    // SETTINGS & SYNC HANDLERS
     // ----------------------------------------------------
     async function loadSettings() {
         try {
@@ -370,19 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             document.getElementById('cfg-sheet-id').value = data.spreadsheet_id || '';
             document.getElementById('cfg-sheet-name').value = data.sheet_name || 'Maintenance_Logs';
-            document.getElementById('cfg-meta-token').value = data.meta_token || '';
-            document.getElementById('cfg-phone-id').value = data.phone_number_id || '';
-            document.getElementById('cfg-verify-token').value = data.verify_token || 'antigravity_verify_123';
 
             const statusEl = document.getElementById('json-status-text');
             if (data.has_google_credentials && data.has_spreadsheet_configured) {
-                statusEl.innerHTML = '✅ <b>Google Sheets fully configured!</b> Credentials + Spreadsheet ID both active.';
+                statusEl.innerHTML = '✅ <b>Google Sheets fully configured!</b> Real-time sync active.';
                 statusEl.style.color = '#10b981';
             } else if (data.has_google_credentials && !data.has_spreadsheet_configured) {
-                statusEl.innerHTML = '⚠️ <b>Credentials loaded</b> but Spreadsheet ID is missing. Add GOOGLE_SPREADSHEET_ID to Render env vars.';
-                statusEl.style.color = '#f59e0b';
-            } else if (!data.has_google_credentials && data.has_spreadsheet_configured) {
-                statusEl.innerHTML = '⚠️ <b>Spreadsheet ID set</b> but service account credentials missing. Add GOOGLE_SERVICE_ACCOUNT_JSON to Render env vars.';
+                statusEl.innerHTML = '⚠️ <b>Credentials loaded</b> but Spreadsheet ID missing.';
                 statusEl.style.color = '#f59e0b';
             } else {
                 statusEl.innerHTML = '❌ Google Sheets not configured. Add GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_SPREADSHEET_ID to Render env vars.';
@@ -419,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusEl.innerHTML = `⚠️ <b>Sync Error:</b> ${data.error}`;
                 statusEl.style.color = '#ef4444';
             } else if (data.synced_breakdowns !== undefined) {
-                statusEl.innerHTML = `✅ <b>Sync complete!</b> ${data.synced_breakdowns} breakdown(s) and ${data.synced_pm} PM log(s) synced (${data.new_rows || 0} new rows added to Google Sheets).`;
+                statusEl.innerHTML = `✅ <b>Sync complete!</b> All records synced to Google Sheets.`;
                 statusEl.style.color = '#10b981';
             } else {
                 statusEl.textContent = '⚠️ Sync response received.';
@@ -433,19 +407,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = '⬆️ Sync All Records to Google Sheets Now';
     });
 
-    document.getElementById('btn-save-meta').addEventListener('click', async () => {
-        const token = document.getElementById('cfg-meta-token').value.trim();
-        const phoneId = document.getElementById('cfg-phone-id').value.trim();
-        const verifyToken = document.getElementById('cfg-verify-token').value.trim();
-
-        await fetch('/api/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ meta_token: token, phone_number_id: phoneId, verify_token: verifyToken })
-        });
-        alert('WhatsApp settings saved!');
-    });
-
     // Client Handover Reset Button
     if (document.getElementById('btn-reset-db')) {
         document.getElementById('btn-reset-db').addEventListener('click', async () => {
@@ -456,7 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusEl = document.getElementById('reset-db-status');
             try {
                 const res = await fetch('/api/reset-database', { method: 'POST' });
-                const data = await res.json();
+                await res.json();
                 statusEl.innerHTML = '✅ <b>All test records cleared successfully!</b> Ready for fresh client handover.';
                 statusEl.style.color = '#10b981';
                 refreshAll();
@@ -467,78 +428,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // File upload for JSON key
-    const jsonInput = document.getElementById('json-file-input');
-    jsonInput.addEventListener('change', async () => {
-        if (!jsonInput.files.length) return;
-        const formData = new FormData();
-        formData.append('file', jsonInput.files[0]);
-
-        try {
-            const res = await fetch('/api/credentials/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (res.ok) {
-                document.getElementById('json-status-text').innerHTML = '✅ <b>service_account.json uploaded & verified successfully!</b>';
-            } else {
-                alert('Invalid JSON file.');
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    });
-
-    // ----------------------------------------------------
-    // BAILEYS WHATSAPP QR CODE CONTROLLER
-    // ----------------------------------------------------
-    async function checkBaileysQR() {
-        try {
-            const res = await fetch('/api/baileys/status');
-            const data = await res.json();
-            const loadingText = document.getElementById('qr-loading-text');
-            const qrImg = document.getElementById('qr-code-img');
-            const badge = document.getElementById('qr-status-badge');
-
-            if (!loadingText || !qrImg || !badge) return;
-
-            if (data.status === 'CONNECTED') {
-                loadingText.style.display = 'none';
-                qrImg.style.display = 'none';
-                badge.innerHTML = '🟢 <b>CONNECTED TO WHATSAPP 24/7</b>';
-                badge.className = 'badge 247-badge';
-            } else if (data.qrCode) {
-                loadingText.style.display = 'none';
-                qrImg.style.display = 'block';
-                qrImg.src = data.qrCode;
-                badge.innerHTML = '⚡ <b>SCAN QR CODE WITH WHATSAPP ON YOUR PHONE</b>';
-                badge.className = 'badge text-warning';
-            } else {
-                loadingText.innerText = 'Click "Generate / Reset QR Code" below to display WhatsApp QR code...';
-                loadingText.style.display = 'block';
-                qrImg.style.display = 'none';
-                badge.innerText = 'Status: ' + (data.status || 'Disconnected');
-            }
-        } catch (e) {
-            console.error('Error fetching Baileys status:', e);
-        }
-    }
-
-    const startQrBtn = document.getElementById('btn-start-qr');
-    if (startQrBtn) {
-        startQrBtn.addEventListener('click', () => {
-            fetch('/api/baileys/start', { method: 'POST' }).then(() => checkBaileysQR());
-        });
-    }
-
-    setInterval(checkBaileysQR, 3000);
-    checkBaileysQR();
-
     function refreshAll() {
         loadStats();
         loadBreakdowns();
         loadPM();
+        loadWelding();
     }
 
     // Initial load
