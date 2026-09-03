@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
-            refreshAll();
+            forceRefreshAll();
         });
     }
 
@@ -370,8 +370,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadBreakdowns() {
-        if (isUserInteractingWithTable('breakdowns-table-body')) return;
+    async function loadBreakdowns(force = false) {
+        if (!force && isUserInteractingWithTable('breakdowns-table-body')) return;
         try {
             const res = await fetch('/api/breakdowns');
             const data = await res.json();
@@ -381,8 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadPM() {
-        if (isUserInteractingWithTable('pm-table-body')) return;
+    async function loadPM(force = false) {
+        if (!force && isUserInteractingWithTable('pm-table-body')) return;
         try {
             const res = await fetch('/api/maintenance');
             const data = await res.json();
@@ -415,8 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    async function loadWelding() {
-        if (isUserInteractingWithTable('welding-table-body')) return;
+    async function loadWelding(force = false) {
+        if (!force && isUserInteractingWithTable('welding-table-body')) return;
         try {
             const res = await fetch('/api/welding');
             const data = await res.json();
@@ -574,29 +574,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.querySelectorAll('.btn-approve-action').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const ticket = e.target.getAttribute('data-ticket');
+                const actionBtn = e.target;
+                if (actionBtn.disabled) return;
+                actionBtn.disabled = true;
+                actionBtn.textContent = '⏳...';
+
+                const ticket = actionBtn.getAttribute('data-ticket');
                 try {
                     await fetch('/api/ticket/approve', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername })
                     });
-                    refreshAll();
+                    forceRefreshAll();
                 } catch (err) { console.error(err); }
             });
         });
 
         document.querySelectorAll('.btn-reject-action').forEach(btn => {
             btn.addEventListener('click', async (e) => {
-                const ticket = e.target.getAttribute('data-ticket');
-                const reason = prompt("Enter rejection reason (optional):", "Scope out of bounds");
+                const actionBtn = e.target;
+                if (actionBtn.disabled) return;
+                
+                const ticket = actionBtn.getAttribute('data-ticket');
+                const reason = prompt(`Reject Ticket ${ticket}?\nEnter rejection reason (optional):`, "");
+                if (reason === null) return;
+
+                actionBtn.disabled = true;
+                actionBtn.textContent = '⏳...';
+
                 try {
                     await fetch('/api/ticket/reject', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || '' })
+                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || 'Rejected by Manager' })
                     });
-                    refreshAll();
+                    forceRefreshAll();
                 } catch (err) { console.error(err); }
             });
         });
@@ -611,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ticket_number: ticket, assigned_to: assignedTo })
                     });
-                    refreshAll();
+                    forceRefreshAll();
                 } catch (err) { console.error(err); }
             });
         });
@@ -672,7 +685,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (res.ok) {
                     if (resolveModal) resolveModal.classList.remove('active');
-                    refreshAll();
+                    forceRefreshAll();
                 } else {
                     const errData = await res.json();
                     alert('Error: ' + (errData.detail || 'Could not resolve ticket'));
@@ -729,7 +742,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
                 if (bdModal) bdModal.classList.remove('active');
-                refreshAll();
+                forceRefreshAll();
             } catch (e) {
                 console.error(e);
             } finally {
@@ -787,7 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
                 if (pmModal) pmModal.classList.remove('active');
-                refreshAll();
+                forceRefreshAll();
             } catch (e) {
                 console.error(e);
             } finally {
@@ -845,7 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     })
                 });
                 if (wdModal) wdModal.classList.remove('active');
-                refreshAll();
+                forceRefreshAll();
             } catch (e) {
                 console.error(e);
             } finally {
@@ -940,7 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await res.json();
                 statusEl.innerHTML = '✅ <b>All test records cleared successfully!</b> Ready for fresh client handover.';
                 statusEl.style.color = '#10b981';
-                refreshAll();
+                forceRefreshAll();
             } catch (e) {
                 statusEl.textContent = '❌ Error clearing database.';
                 statusEl.style.color = '#ef4444';
@@ -950,13 +963,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function refreshAll() {
         loadStats();
-        loadBreakdowns();
-        loadPM();
-        loadWelding();
+        loadBreakdowns(false);
+        loadPM(false);
+        loadWelding(false);
+    }
+
+    function forceRefreshAll() {
+        loadStats();
+        loadBreakdowns(true);
+        loadPM(true);
+        loadWelding(true);
     }
 
     // Initial load
-    refreshAll();
+    forceRefreshAll();
     loadSettings();
 
     // Auto refresh stats every 10 seconds

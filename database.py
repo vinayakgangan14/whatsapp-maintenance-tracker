@@ -269,9 +269,9 @@ def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
     if ticket_number.startswith("BD-"):
         cursor.execute("UPDATE breakdowns SET status = 'REJECTED', resolution_notes = ? WHERE ticket_number = ?", (note, ticket_number))
     elif ticket_number.startswith("PM-"):
-        cursor.execute("UPDATE maintenance_logs SET status = 'REJECTED' WHERE ticket_number = ?", (ticket_number,))
+        cursor.execute("UPDATE maintenance_logs SET status = 'REJECTED', activity_description = activity_description || ? WHERE ticket_number = ?", (f" [{note}]", ticket_number))
     elif ticket_number.startswith("WD-"):
-        cursor.execute("UPDATE welding_logs SET status = 'REJECTED' WHERE ticket_number = ?", (ticket_number,))
+        cursor.execute("UPDATE welding_logs SET status = 'REJECTED', welding_details = welding_details || ? WHERE ticket_number = ?", (f" [{note}]", ticket_number))
         
     conn.commit()
     conn.close()

@@ -198,9 +198,13 @@ print(json.dumps({"ticket": ticket}))
 app.post('/api/ticket/approve', async (req, res) => {
     const { ticket_number, manager_name } = req.body;
     const code = `
-import database, json
+import database, json, threading, google_sheets
 database.init_db()
 ok, msg = database.approve_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')})
+if ok:
+    t = threading.Thread(target=google_sheets.sync_all_records_batch)
+    t.daemon = True
+    t.start()
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
@@ -210,9 +214,13 @@ print(json.dumps({"ok": ok, "msg": msg}))
 app.post('/api/ticket/reject', async (req, res) => {
     const { ticket_number, manager_name, reason } = req.body;
     const code = `
-import database, json
+import database, json, threading, google_sheets
 database.init_db()
 ok, msg = database.reject_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')}, ${JSON.stringify(reason || '')})
+if ok:
+    t = threading.Thread(target=google_sheets.sync_all_records_batch)
+    t.daemon = True
+    t.start()
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
@@ -222,9 +230,13 @@ print(json.dumps({"ok": ok, "msg": msg}))
 app.post('/api/ticket/assign', async (req, res) => {
     const { ticket_number, assigned_to } = req.body;
     const code = `
-import database, json
+import database, json, threading, google_sheets
 database.init_db()
 ok, msg = database.assign_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(assigned_to || 'Unassigned')})
+if ok:
+    t = threading.Thread(target=google_sheets.sync_all_records_batch)
+    t.daemon = True
+    t.start()
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
