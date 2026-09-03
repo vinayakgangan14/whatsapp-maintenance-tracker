@@ -1,5 +1,103 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
+    // PURECHEM EQUIPMENT BY PLANT MAPPING
+    // ----------------------------------------------------
+    const EQUIPMENT_BY_PLANT = {
+        "Utility": [
+            "NEPA 33KVA TRANSFORMER",
+            "CAT GG-1218 KVA",
+            "CAT GG-600 KVA",
+            "PERKINS GG-500 KVA",
+            "CAT DG-1100 KVA",
+            "PERKINS DG-500 KVA",
+            "LT ROOM",
+            "STEAM BOILER -1",
+            "STEAM BOILER -2",
+            "THERMIC BOILER -3",
+            "HERZT COMPRESSOR",
+            "ELGI COMPRESSOR",
+            "FIRE HYDRATANT SYSTEM",
+            "COOLING TOWER",
+            "DM WATER PLANT",
+            "ETP PLANT"
+        ],
+        "LCP/PU": [
+            "LCP REACTOR-1",
+            "LCP REACTOR-2",
+            "PU REACTOR-1",
+            "PU REACTOR-2",
+            "PU REACTOR-3",
+            "PU REACTOR-4",
+            "PU REACTOR-5",
+            "TOP GIT FILLING / CAPPING MACHINE",
+            "TOP GUM FILLING / LABELLING MACHINE"
+        ],
+        "PVAC": [
+            "PVAC-1 REACTOR-1",
+            "PVAC-1 REACTOR-2",
+            "PROCESSSING VESSEL -1",
+            "PROCESSSING VESSEL -2",
+            "HOLDING TANK( 1,2 & 3)",
+            "TOPBOUND PRODUCTION LINE-1 (10-20 KG)",
+            "TOPBOUND PRODUCTION LINE-2 (2-10 KG)",
+            "TOPBOUND PRODUCTION LINE-3 (100G-1 KG)",
+            "TOPBOUND PRODUCTION LINE-4 (250G-1 KG)"
+        ],
+        "PVAC Extension": [
+            "PVAC-2 REACTOR-1 (5KL)",
+            "PVAC-2 BLENDER-2 (20KL)"
+        ],
+        "DCP": [
+            "SAND PLANT",
+            "BLENDER -2",
+            "BLENDER -3",
+            "BLENDER -4",
+            "BLENDER -5",
+            "BLENDER -6"
+        ],
+        "Plastic": [
+            "1LTR-1",
+            "1LTR-2",
+            "2LTR-DH",
+            "1LTR.DH",
+            "5LTR.S/S",
+            "5LTR-DH",
+            "IBM(Injection Blow Molding)",
+            "Omega-1",
+            "Omega-2",
+            "Omega-3",
+            "Hydron-1",
+            "Hydron-2",
+            "SP750 Printing Machine",
+            "SPVL1OOO Printing Machine",
+            "TECHNO PRINT 5 kg",
+            "TECHNO PRINT 10 kg",
+            "UV Printing Machine"
+        ]
+    };
+
+    function updateEquipmentOptions(plantSelectId, equipmentSelectId) {
+        const plantSelect = document.getElementById(plantSelectId);
+        const eqSelect = document.getElementById(equipmentSelectId);
+        if (!plantSelect || !eqSelect) return;
+
+        const selectedPlant = plantSelect.value;
+        const items = EQUIPMENT_BY_PLANT[selectedPlant] || [];
+
+        eqSelect.innerHTML = '<option value="">-- Select Equipment --</option>' +
+            items.map(eq => `<option value="${eq}">${eq}</option>`).join('');
+    }
+
+    ['modal-bd-plant', 'modal-pm-plant', 'modal-wd-plant'].forEach(plantId => {
+        const el = document.getElementById(plantId);
+        if (el) {
+            const eqId = plantId.replace('-plant', '-eq');
+            el.addEventListener('change', () => updateEquipmentOptions(plantId, eqId));
+            updateEquipmentOptions(plantId, eqId);
+        }
+    });
+
+    // ----------------------------------------------------
     // PURECHEM MAINTENANCE STAFF LIST
     // ----------------------------------------------------
     const MAINTENANCE_STAFF = [
@@ -330,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // OPERATOR/TECHNICIAN ROLE: NO RESOLVE/APPROVE RIGHTS!
         if (currentUserRole === 'Operator') {
-            return `<button class="btn btn-sm btn-outline" disabled style="opacity:0.6;">Manager Rights Needed</button>`;
+            return `<button class="btn btn-sm btn-outline" disabled style="opacity:0.6;">Manager Only</button>`;
         }
 
         // MAINTENANCE MANAGER ROLE: HAS FULL APPROVE, REJECT, AND RESOLVE RIGHTS!
@@ -514,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Quick Log Breakdown Modal
     const bdModal = document.getElementById('modal-log-bd');
     document.getElementById('btn-quick-log').addEventListener('click', () => {
-        document.getElementById('modal-bd-eq').value = '';
+        updateEquipmentOptions('modal-bd-plant', 'modal-bd-eq');
         document.getElementById('modal-bd-issue').value = '';
         if (bdModal) bdModal.classList.add('active');
     });
@@ -532,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const issue = document.getElementById('modal-bd-issue').value.trim();
 
             if (!eq || !issue) {
-                alert('Please enter both equipment details and issue description.');
+                alert('Please select an equipment and enter issue description.');
                 return;
             }
 
@@ -559,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pmModal = document.getElementById('modal-log-pm');
     if (document.getElementById('btn-schedule-pm')) {
         document.getElementById('btn-schedule-pm').addEventListener('click', () => {
-            document.getElementById('modal-pm-eq').value = '';
+            updateEquipmentOptions('modal-pm-plant', 'modal-pm-eq');
             document.getElementById('modal-pm-desc').value = '';
             if (pmModal) pmModal.classList.add('active');
         });
@@ -580,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const assigned = document.getElementById('modal-pm-assigned').value;
 
             if (!eq || !desc) {
-                alert('Please enter equipment ID and PM activity description.');
+                alert('Please select equipment and enter PM activity description.');
                 return;
             }
 
@@ -606,7 +704,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const wdModal = document.getElementById('modal-log-welding');
     if (document.getElementById('btn-schedule-welding')) {
         document.getElementById('btn-schedule-welding').addEventListener('click', () => {
-            document.getElementById('modal-wd-eq').value = '';
+            updateEquipmentOptions('modal-wd-plant', 'modal-wd-eq');
             document.getElementById('modal-wd-details').value = '';
             if (wdModal) wdModal.classList.add('active');
         });
@@ -627,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const assigned = document.getElementById('modal-wd-assigned').value;
 
             if (!eq || !details) {
-                alert('Please enter equipment/structure name and welding work details.');
+                alert('Please select equipment and enter welding work details.');
                 return;
             }
 
