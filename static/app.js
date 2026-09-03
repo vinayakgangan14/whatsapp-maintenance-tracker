@@ -1,5 +1,15 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
+    // HELPER: PREVENT AUTO-REFRESH DOM DESTRUCTION ON ACTIVE DROPDOWNS
+    // ----------------------------------------------------
+    function isUserInteractingWithTable(tbodyId) {
+        const active = document.activeElement;
+        if (!active) return false;
+        const tbody = document.getElementById(tbodyId);
+        return tbody && tbody.contains(active);
+    }
+
+    // ----------------------------------------------------
     // PURECHEM EQUIPMENT BY PLANT MAPPING
     // ----------------------------------------------------
     const EQUIPMENT_BY_PLANT = {
@@ -352,6 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadBreakdowns() {
+        if (isUserInteractingWithTable('breakdowns-table-body')) return;
         try {
             const res = await fetch('/api/breakdowns');
             const data = await res.json();
@@ -362,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadPM() {
+        if (isUserInteractingWithTable('pm-table-body')) return;
         try {
             const res = await fetch('/api/maintenance');
             const data = await res.json();
@@ -395,6 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadWelding() {
+        if (isUserInteractingWithTable('welding-table-body')) return;
         try {
             const res = await fetch('/api/welding');
             const data = await res.json();
@@ -622,6 +635,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('btn-confirm-resolve')) {
         document.getElementById('btn-confirm-resolve').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirm-resolve');
+            if (btn.disabled) return;
+
             const notes = document.getElementById('modal-resolution').value.trim();
             const tech = document.getElementById('modal-tech').value.trim();
 
@@ -629,6 +645,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Please enter resolution notes.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Resolving...';
 
             try {
                 const res = await fetch('/api/breakdowns/resolve', {
@@ -651,11 +670,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (e) {
                 console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Mark Resolved & Sync';
             }
         });
     }
 
-    // Quick Log Breakdown Modal
+    // Quick Log Breakdown Modal (Anti-duplicate double click protection + instant response)
     const bdModal = document.getElementById('modal-log-bd');
     document.getElementById('btn-quick-log').addEventListener('click', () => {
         updateEquipmentOptions('modal-bd-plant', 'modal-bd-eq');
@@ -671,6 +693,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('btn-confirm-log-bd')) {
         document.getElementById('btn-confirm-log-bd').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirm-log-bd');
+            if (btn.disabled) return;
+
             const plant = document.getElementById('modal-bd-plant').value;
             const eq = document.getElementById('modal-bd-eq').value.trim();
             const issue = document.getElementById('modal-bd-issue').value.trim();
@@ -679,6 +704,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Please select an equipment and enter issue description.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Submitting...';
 
             try {
                 await fetch('/api/breakdowns/log', {
@@ -695,6 +723,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 refreshAll();
             } catch (e) {
                 console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Breakdown';
             }
         });
     }
@@ -717,6 +748,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('btn-confirm-log-pm')) {
         document.getElementById('btn-confirm-log-pm').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirm-log-pm');
+            if (btn.disabled) return;
+
             const plant = document.getElementById('modal-pm-plant').value;
             const eq = document.getElementById('modal-pm-eq').value.trim();
             const desc = document.getElementById('modal-pm-desc').value.trim();
@@ -727,6 +761,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Please select equipment and enter PM activity description.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Submitting...';
 
             try {
                 await fetch('/api/pm/log', {
@@ -742,7 +779,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (pmModal) pmModal.classList.remove('active');
                 refreshAll();
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit PM Schedule';
+            }
         });
     }
 
@@ -764,6 +806,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (document.getElementById('btn-confirm-log-wd')) {
         document.getElementById('btn-confirm-log-wd').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-confirm-log-wd');
+            if (btn.disabled) return;
+
             const plant = document.getElementById('modal-wd-plant').value;
             const eq = document.getElementById('modal-wd-eq').value.trim();
             const details = document.getElementById('modal-wd-details').value.trim();
@@ -774,6 +819,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Please select equipment and enter welding work details.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Submitting...';
 
             try {
                 await fetch('/api/welding/log', {
@@ -789,7 +837,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (wdModal) wdModal.classList.remove('active');
                 refreshAll();
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit Welding Schedule';
+            }
         });
     }
 

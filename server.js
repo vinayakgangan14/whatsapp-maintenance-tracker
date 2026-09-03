@@ -128,10 +128,11 @@ print(json.dumps({"message": "Database cleared successfully"}))
     res.json(data);
 });
 
+// Instant Breakdown Log (Non-blocking background Google Sheets sync)
 app.post('/api/breakdowns/log', async (req, res) => {
     const { department, equipment_id, issue_description, sender_name } = req.body;
     const code = `
-import database, json, google_sheets
+import database, json, threading, google_sheets
 database.init_db()
 ticket, bd_id = database.log_breakdown(
     department=${JSON.stringify(department || 'General')},
@@ -142,17 +143,20 @@ ticket, bd_id = database.log_breakdown(
 open_bds = database.get_open_breakdowns()
 matching = [b for b in open_bds if b['ticket_number'] == ticket]
 if matching:
-    google_sheets.sync_breakdown_to_sheet(matching[0])
+    t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(matching[0],))
+    t.daemon = True
+    t.start()
 print(json.dumps({"ticket": ticket, "id": bd_id}))
     `;
     const data = await runPythonCode(code);
     res.json(data.ticket ? data : { message: "Logged" });
 });
 
+// Instant PM Log
 app.post('/api/pm/log', async (req, res) => {
     const { department, equipment_id, activity_description, scheduled_time, technician } = req.body;
     const code = `
-import database, json, google_sheets
+import database, json, threading, google_sheets
 database.init_db()
 ticket = database.log_maintenance(
     department=${JSON.stringify(department || 'General')},
@@ -161,16 +165,17 @@ ticket = database.log_maintenance(
     scheduled_time=${JSON.stringify(scheduled_time || 'As Scheduled')},
     technician=${JSON.stringify(technician || 'Maintenance Tech')}
 )
-try:
-    google_sheets.sync_maintenance_to_sheet({"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}})
-except Exception as e:
-    pass
+payload = {"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}}
+t = threading.Thread(target=google_sheets.sync_maintenance_to_sheet, args=(payload,))
+t.daemon = True
+t.start()
 print(json.dumps({"ticket": ticket}))
     `;
     const data = await runPythonCode(code);
     res.json(data);
 });
 
+// Instant Welding Log
 app.post('/api/welding/log', async (req, res) => {
     const { department, equipment_id, welding_details, scheduled_time, technician } = req.body;
     const code = `
@@ -235,7 +240,7 @@ app.post('/api/breakdowns/resolve', async (req, res) => {
     const pyTech     = JSON.stringify(technician || 'Technician');
 
     const code = `
-import database, json, google_sheets
+import database, json, threading, google_sheets
 database.init_db()
 updated, err = database.resolve_breakdown(
     ticket_number=${pyTicket},
@@ -244,10 +249,9 @@ updated, err = database.resolve_breakdown(
     technician=${pyTech}
 )
 if updated:
-    try:
-        google_sheets.sync_breakdown_to_sheet(updated)
-    except Exception as gs_err:
-        pass
+    t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(updated,))
+    t.daemon = True
+    t.start()
 print(json.dumps({"updated": updated, "err": err}))
     `;
     const data = await runPythonCode(code);
