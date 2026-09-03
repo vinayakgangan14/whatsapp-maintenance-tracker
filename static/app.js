@@ -445,16 +445,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAssignedToColumn(item) {
         const assigned = item.assigned_to || 'Unassigned';
-        if (currentUserRole === 'Manager' || currentUserRole === 'Admin') {
-            const options = MAINTENANCE_STAFF.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
-            return `
-                <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); max-width: 180px;">
-                    <option value="Unassigned" ${assigned === 'Unassigned' ? 'selected' : ''}>-- Unassigned --</option>
-                    ${options}
-                </select>
-            `;
+        const isClosed = (item.status === 'RESOLVED' || item.status === 'REJECTED');
+
+        // OPERATOR MODE OR CLOSED TICKET: READ-ONLY LOCK
+        if (currentUserRole === 'Operator' || isClosed) {
+            const badgeColor = assigned === 'Unassigned' ? 'rgba(255,255,255,0.06)' : 'rgba(59, 130, 246, 0.15)';
+            const textColor = assigned === 'Unassigned' ? '#9ca3af' : '#60a5fa';
+            return `<span class="badge" style="background: ${badgeColor}; color: ${textColor}; border: 1px solid rgba(255,255,255,0.1); font-size:0.8rem; padding: 4px 8px;">👤 ${assigned}</span>`;
         }
-        return `<span class="badge" style="background: rgba(255,255,255,0.06); color: #e2e8f0; font-size:0.8rem;">${assigned}</span>`;
+
+        // MANAGER AND ADMIN MODE ON ACTIVE TICKETS: EDITABLE DROPDOWN
+        const options = MAINTENANCE_STAFF.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
+        return `
+            <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); max-width: 180px;">
+                <option value="Unassigned" ${assigned === 'Unassigned' ? 'selected' : ''}>-- Assign Staff --</option>
+                ${options}
+            </select>
+        `;
     }
 
     function renderActionButtons(item) {
