@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (role === 'Admin') {
                 const passcode = document.getElementById('login-passcode').value.trim();
                 if (passcode !== 'Vinayak@123') {
-                    alert('Invalid Administrator Password! Password is case-sensitive (Vinayak@123)');
+                    alert('Invalid Administrator Password. Please try again.');
                     return;
                 }
                 username = 'Vinayak Gangan';
@@ -189,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const passcode = document.getElementById('login-passcode').value.trim();
 
                 if (passcode !== 'Purechem@123') {
-                    alert('Invalid Manager Password! Password is case-sensitive (Purechem@123)');
+                    alert('Invalid Manager Password. Please try again.');
                     return;
                 }
                 username = managerVal === 'Shanmugham' ? 'Mr. Shanmugham' : 'MR. RAJU NEEL';
@@ -205,6 +205,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
             refreshAll();
+        });
+    }
+
+    if (loginModal) {
+        loginModal.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (passcodeBtn) passcodeBtn.click();
+            }
         });
     }
 
