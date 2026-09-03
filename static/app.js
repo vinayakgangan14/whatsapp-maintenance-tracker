@@ -129,20 +129,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // AUTH & ROLE MANAGEMENT
     // ----------------------------------------------------
-    let currentUserRole = localStorage.getItem('pure_role') || null;
-    let currentUsername = localStorage.getItem('pure_username') || null;
+    let currentUserRole = sessionStorage.getItem('pure_role') || null;
+    let currentUsername = sessionStorage.getItem('pure_username') || null;
 
     const loginModal = document.getElementById('login-modal');
     const roleSelect = document.getElementById('login-role');
+    const operatorGroup = document.getElementById('operator-username-group');
+    const managerGroup = document.getElementById('manager-select-group');
     const passcodeGroup = document.getElementById('passcode-group');
     const passcodeBtn = document.getElementById('btn-login-submit');
 
     if (roleSelect) {
         roleSelect.addEventListener('change', () => {
             if (roleSelect.value === 'Manager') {
-                passcodeGroup.style.display = 'block';
+                if (operatorGroup) operatorGroup.style.display = 'none';
+                if (managerGroup) managerGroup.style.display = 'block';
+                if (passcodeGroup) passcodeGroup.style.display = 'block';
             } else {
-                passcodeGroup.style.display = 'none';
+                if (operatorGroup) operatorGroup.style.display = 'block';
+                if (managerGroup) managerGroup.style.display = 'none';
+                if (passcodeGroup) passcodeGroup.style.display = 'none';
             }
         });
     }
@@ -150,18 +156,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (passcodeBtn) {
         passcodeBtn.addEventListener('click', () => {
             const role = document.getElementById('login-role').value;
-            const username = document.getElementById('login-username').value.trim() || 'User';
-            const passcode = document.getElementById('login-passcode').value.trim();
+            let username = '';
+            
+            if (role === 'Manager') {
+                const managerVal = document.getElementById('login-manager-select').value;
+                const passcode = document.getElementById('login-passcode').value.trim();
 
-            if (role === 'Manager' && passcode !== 'admin123') {
-                alert('Invalid Manager Passcode! (Default passcode: admin123)');
-                return;
+                if (passcode !== 'Purechem@123') {
+                    alert('Invalid Manager Password! Password is case-sensitive (Purechem@123)');
+                    return;
+                }
+                username = managerVal === 'Shanmugham' ? 'Mr. Shanmugham' : 'MR. RAJU NEEL';
+            } else {
+                username = document.getElementById('login-username').value.trim() || 'Operator';
             }
 
             currentUserRole = role;
             currentUsername = username;
-            localStorage.setItem('pure_role', role);
-            localStorage.setItem('pure_username', username);
+            sessionStorage.setItem('pure_role', role);
+            sessionStorage.setItem('pure_username', username);
 
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
@@ -189,8 +202,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('btn-logout').addEventListener('click', () => {
-        localStorage.removeItem('pure_role');
-        localStorage.removeItem('pure_username');
+        sessionStorage.removeItem('pure_role');
+        sessionStorage.removeItem('pure_username');
         currentUserRole = null;
         currentUsername = null;
         if (loginModal) loginModal.classList.add('active');
