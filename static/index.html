@@ -25,6 +25,7 @@
                 <select id="login-role" class="form-control" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
                     <option value="Operator">Operator / Technician</option>
                     <option value="Manager">Maintenance Manager</option>
+                    <option value="Admin">System Administrator</option>
                 </select>
             </div>
 
@@ -43,10 +44,16 @@
                 </select>
             </div>
 
+            <!-- ADMIN USERNAME GROUP -->
+            <div class="form-group" id="admin-username-group" style="text-align: left; display: none;">
+                <label>Administrator Account</label>
+                <input type="text" id="login-admin-name" value="Vinayak Gangan" readonly style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #10b981; font-weight:600; border: 1px solid rgba(16,185,129,0.3);">
+            </div>
+
             <!-- PASSCODE GROUP -->
             <div class="form-group" id="passcode-group" style="text-align: left; display: none;">
-                <label>Manager Password</label>
-                <input type="password" id="login-passcode" placeholder="Enter Manager Password" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                <label id="passcode-label">Password</label>
+                <input type="password" id="login-passcode" placeholder="Enter Password" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
             </div>
 
             <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Purechem Portal</button>

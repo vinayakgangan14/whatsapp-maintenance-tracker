@@ -136,18 +136,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const roleSelect = document.getElementById('login-role');
     const operatorGroup = document.getElementById('operator-username-group');
     const managerGroup = document.getElementById('manager-select-group');
+    const adminGroup = document.getElementById('admin-username-group');
     const passcodeGroup = document.getElementById('passcode-group');
     const passcodeBtn = document.getElementById('btn-login-submit');
 
     if (roleSelect) {
         roleSelect.addEventListener('change', () => {
-            if (roleSelect.value === 'Manager') {
+            const role = roleSelect.value;
+            if (role === 'Admin') {
+                if (operatorGroup) operatorGroup.style.display = 'none';
+                if (managerGroup) managerGroup.style.display = 'none';
+                if (adminGroup) adminGroup.style.display = 'block';
+                if (passcodeGroup) passcodeGroup.style.display = 'block';
+            } else if (role === 'Manager') {
                 if (operatorGroup) operatorGroup.style.display = 'none';
                 if (managerGroup) managerGroup.style.display = 'block';
+                if (adminGroup) adminGroup.style.display = 'none';
                 if (passcodeGroup) passcodeGroup.style.display = 'block';
             } else {
                 if (operatorGroup) operatorGroup.style.display = 'block';
                 if (managerGroup) managerGroup.style.display = 'none';
+                if (adminGroup) adminGroup.style.display = 'none';
                 if (passcodeGroup) passcodeGroup.style.display = 'none';
             }
         });
@@ -158,7 +167,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const role = document.getElementById('login-role').value;
             let username = '';
             
-            if (role === 'Manager') {
+            if (role === 'Admin') {
+                const passcode = document.getElementById('login-passcode').value.trim();
+                if (passcode !== 'Vinayak@123') {
+                    alert('Invalid Administrator Password! Password is case-sensitive (Vinayak@123)');
+                    return;
+                }
+                username = 'Vinayak Gangan';
+            } else if (role === 'Manager') {
                 const managerVal = document.getElementById('login-manager-select').value;
                 const passcode = document.getElementById('login-passcode').value.trim();
 
@@ -192,9 +208,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const roleBadge = document.getElementById('sidebar-role-badge');
         const userDisplay = document.getElementById('logged-user-display');
         if (roleBadge) {
-            roleBadge.innerText = currentUserRole === 'Manager' ? '👑 Manager Mode' : '👷 Operator Mode';
-            roleBadge.className = currentUserRole === 'Manager' ? 'badge' : 'badge 247-badge';
-            if (currentUserRole === 'Manager') roleBadge.style.background = '#8b5cf6';
+            if (currentUserRole === 'Admin') {
+                roleBadge.innerText = '⚡ Admin Mode';
+                roleBadge.className = 'badge';
+                roleBadge.style.background = '#10b981';
+            } else if (currentUserRole === 'Manager') {
+                roleBadge.innerText = '👑 Manager Mode';
+                roleBadge.className = 'badge';
+                roleBadge.style.background = '#8b5cf6';
+            } else {
+                roleBadge.innerText = '👷 Operator Mode';
+                roleBadge.className = 'badge 247-badge';
+                roleBadge.style.background = '';
+            }
         }
         if (userDisplay) {
             userDisplay.innerText = `${currentUsername} (${currentUserRole})`;
@@ -419,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAssignedToColumn(item) {
         const assigned = item.assigned_to || 'Unassigned';
-        if (currentUserRole === 'Manager') {
+        if (currentUserRole === 'Manager' || currentUserRole === 'Admin') {
             const options = MAINTENANCE_STAFF.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
             return `
                 <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); max-width: 180px;">
@@ -439,13 +465,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<button class="btn btn-sm btn-outline" disabled>Closed</button>`;
         }
 
-        // OPERATOR/TECHNICIAN ROLE: NO RESOLVE/APPROVE RIGHTS!
+        // OPERATOR ROLE: NO RESOLVE/APPROVE RIGHTS!
         if (currentUserRole === 'Operator') {
             return `<button class="btn btn-sm btn-outline" disabled style="opacity:0.6;">Manager Only</button>`;
         }
 
-        // MAINTENANCE MANAGER ROLE: HAS FULL APPROVE, REJECT, AND RESOLVE RIGHTS!
-        if (currentUserRole === 'Manager' && isPending) {
+        // MANAGER & ADMIN ROLES: FULL APPROVE, REJECT, AND RESOLVE RIGHTS!
+        if ((currentUserRole === 'Manager' || currentUserRole === 'Admin') && isPending) {
             return `
                 <button class="btn btn-sm btn-emerald btn-approve-action" data-ticket="${item.ticket_number}" style="margin-right:4px;">Approve</button>
                 <button class="btn btn-sm btn-outline btn-reject-action" data-ticket="${item.ticket_number}" style="border-color:#ef4444;color:#ef4444;">Reject</button>
@@ -827,10 +853,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = '⬆️ Sync All Records to Google Sheets Now';
     });
 
-    // Client Handover Reset Button
+    // Client Handover Reset Button — EXCLUSIVE ADMINISTRATOR RIGHT!
     if (document.getElementById('btn-reset-db')) {
         document.getElementById('btn-reset-db').addEventListener('click', async () => {
-            if (!confirm('⚠️ Are you sure you want to clear ALL breakdown tickets and maintenance records for client handover? This action cannot be undone.')) {
+            if (currentUserRole !== 'Admin') {
+                alert('⛔ Access Denied: Clearing database records is strictly restricted to Administrator (Vinayak Gangan) only.');
+                return;
+            }
+
+            if (!confirm('⚠️ Administrator Action: Are you sure you want to clear ALL breakdown tickets and maintenance records for client handover? This action cannot be undone.')) {
                 return;
             }
 
