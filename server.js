@@ -214,6 +214,18 @@ print(json.dumps({"ok": ok, "msg": msg}))
     res.json(data);
 });
 
+app.post('/api/ticket/assign', async (req, res) => {
+    const { ticket_number, assigned_to } = req.body;
+    const code = `
+import database, json
+database.init_db()
+ok, msg = database.assign_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(assigned_to || 'Unassigned')})
+print(json.dumps({"ok": ok, "msg": msg}))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
 app.post('/api/breakdowns/resolve', async (req, res) => {
     const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pure Maintenance & Breakdown Management Portal</title>
+    <title>Purechem Maintenance Tracking Portal</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -13,10 +13,12 @@
 <body>
     <!-- LOGIN OVERLAY -->
     <div class="modal active" id="login-modal" style="background: rgba(10, 15, 30, 0.95); backdrop-filter: blur(12px); z-index: 9999;">
-        <div class="modal-content glass-card" style="max-width: 420px; text-align: center; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
-            <div style="font-size: 3rem; margin-bottom: 0.5rem;">🛠️</div>
-            <h2 style="margin-bottom: 0.25rem;">Pure Portal Login</h2>
-            <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.5rem;">Select your role to access the Maintenance Suite</p>
+        <div class="modal-content glass-card" style="max-width: 440px; text-align: center; border: 1px solid rgba(255,255,255,0.15); box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div style="margin-bottom: 1rem; background: #fff; padding: 10px 16px; border-radius: 8px; display: inline-block;">
+                <img src="/static/logo.png" alt="Purechem Manufacturing Limited Logo" style="max-height: 48px; object-fit: contain;">
+            </div>
+            <h2 style="margin-bottom: 0.25rem;">Purechem Portal Login</h2>
+            <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.5rem;">Select your role to access Purechem Maintenance Suite</p>
 
             <div class="form-group" style="text-align: left;">
                 <label>User Role</label>
@@ -36,7 +38,7 @@
                 <input type="password" id="login-passcode" placeholder="Enter Manager Passcode (admin123)" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
             </div>
 
-            <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Portal</button>
+            <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Purechem Portal</button>
         </div>
     </div>
 
@@ -45,9 +47,11 @@
         <aside class="sidebar">
             <div class="brand">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div class="brand-icon">🛠️</div>
+                    <div style="background: #fff; padding: 4px 8px; border-radius: 6px; display: flex; align-items: center;">
+                        <img src="/static/logo.png" alt="Purechem Logo" style="height: 28px; object-fit: contain;">
+                    </div>
                     <div class="brand-text">
-                        <h2>Pure Portal</h2>
+                        <h2>Purechem</h2>
                         <span class="badge 247-badge" id="sidebar-role-badge">Operator Mode</span>
                     </div>
                 </div>
@@ -88,9 +92,14 @@
         <main class="main-content">
             <!-- Top Navbar -->
             <header class="top-header">
-                <div class="header-title">
-                    <h1 id="page-title">Pure Maintenance & Breakdown Portal</h1>
-                    <p class="subtitle">Multi-plant breakdown reporting, MTTR/MTBF analytics, and Google Sheets live logging</p>
+                <div class="header-title" style="display: flex; align-items: center; gap: 1rem;">
+                    <div style="background: #fff; padding: 6px 12px; border-radius: 8px; display: flex; align-items: center;">
+                        <img src="/static/logo.png" alt="Purechem Manufacturing Limited Logo" style="height: 36px; object-fit: contain;">
+                    </div>
+                    <div>
+                        <h1 id="page-title" style="margin: 0; font-size: 1.5rem;">Purechem Maintenance Tracking Portal</h1>
+                        <p class="subtitle" style="margin: 0;">Purechem Manufacturing Limited Breakdown & Maintenance Management Suite</p>
+                    </div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                     <button class="btn btn-emerald" id="btn-quick-log">
@@ -209,6 +218,7 @@
                                     <th>Equipment ID</th>
                                     <th>Issue Description</th>
                                     <th>Status</th>
+                                    <th>Assigned To</th>
                                     <th>Start Time</th>
                                     <th>End Time</th>
                                     <th>Downtime</th>
@@ -216,7 +226,7 @@
                                 </tr>
                             </thead>
                             <tbody id="breakdowns-table-body">
-                                <tr><td colspan="9" class="text-center">Loading breakdowns...</td></tr>
+                                <tr><td colspan="10" class="text-center">Loading breakdowns...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -239,7 +249,7 @@
                                     <th>Activity Description</th>
                                     <th>Scheduled Time</th>
                                     <th>Status</th>
-                                    <th>Technician</th>
+                                    <th>Assigned To</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -267,7 +277,7 @@
                                     <th>Welding Details</th>
                                     <th>Scheduled Time</th>
                                     <th>Status</th>
-                                    <th>Technician</th>
+                                    <th>Assigned To</th>
                                     <th>Action</th>
                                 </tr>
                             </thead>
@@ -405,8 +415,10 @@
                 <input type="text" id="modal-pm-time" placeholder="e.g. Tomorrow 10 AM or 2026-09-05 09:00" value="Tomorrow 10 AM">
             </div>
             <div class="form-group">
-                <label>Assigned Technician</label>
-                <input type="text" id="modal-pm-tech" placeholder="e.g. Alex Maintenance">
+                <label>Assigned Staff</label>
+                <select id="modal-pm-assigned" class="form-control staff-dropdown" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                    <option value="Unassigned">-- Assign Maintenance Staff --</option>
+                </select>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-outline" id="btn-close-pm-modal">Cancel</button>
@@ -445,8 +457,10 @@
                 <input type="text" id="modal-wd-time" placeholder="e.g. 3 PM Today or 2026-09-04 14:00" value="Today 3 PM">
             </div>
             <div class="form-group">
-                <label>Assigned Welder / Technician</label>
-                <input type="text" id="modal-wd-tech" placeholder="e.g. Sam Welder">
+                <label>Assigned Staff</label>
+                <select id="modal-wd-assigned" class="form-control staff-dropdown" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.4); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                    <option value="Unassigned">-- Assign Maintenance Staff --</option>
+                </select>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-outline" id="btn-close-wd-modal">Cancel</button>

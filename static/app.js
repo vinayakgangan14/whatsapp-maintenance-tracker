@@ -1,5 +1,34 @@
 document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
+    // PURECHEM MAINTENANCE STAFF LIST
+    // ----------------------------------------------------
+    const MAINTENANCE_STAFF = [
+        "MR. RAJU NEEL - MAINTENANCE MANAGER",
+        "Mr. Shanmugham - MAINTENANCE MANAGER",
+        "AKEEM ELEGBEDE - MAINTENANCE ASST.",
+        "NKWOR HENRY - MECHANICAL Dept",
+        "AFOLABI BABATUNDEY - ELECTRICAL Dept",
+        "OLAOLUWA ADEADOYIN - ELECTRICAL Dept",
+        "SAMSUDEEN ABOLADE - ELECTRICAL Dept",
+        "DAMILOLA OYAMOYE - ELECTRICAL Dept",
+        "ANDREW PETER - MECHANICAL Dept",
+        "IRIYOMINE MATHEW - MECHANICAL Dept",
+        "JULIOUS SAMUEL - MECHANICAL Dept",
+        "MUYIDEEN SOLABI - MECHANICAL Dept",
+        "AFEEZ BELLO - MECHANICAL Dept",
+        "OLUWAJAYOGBE TUNDE - ELECTRICAL Dept",
+        "IDOWU SAMUEL - ELECTRICAL Dept"
+    ];
+
+    function populateStaffDropdowns() {
+        document.querySelectorAll('.staff-dropdown').forEach(select => {
+            select.innerHTML = '<option value="Unassigned">-- Select Maintenance Staff --</option>' +
+                MAINTENANCE_STAFF.map(staff => `<option value="${staff}">${staff}</option>`).join('');
+        });
+    }
+    populateStaffDropdowns();
+
+    // ----------------------------------------------------
     // AUTH & ROLE MANAGEMENT
     // ----------------------------------------------------
     let currentUserRole = localStorage.getItem('pure_role') || null;
@@ -207,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             tbody.innerHTML = data.map(item => {
                 const statusHtml = renderStatusBadge(item.status);
+                const assignedHtml = renderAssignedToColumn(item);
                 const actionHtml = renderActionButtons(item);
                 return `
                 <tr>
@@ -216,7 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${item.activity_description}</td>
                     <td>${item.scheduled_time || 'As Scheduled'}</td>
                     <td>${statusHtml}</td>
-                    <td>${item.technician}</td>
+                    <td>${assignedHtml}</td>
                     <td>${actionHtml}</td>
                 </tr>
             `}).join('');
@@ -239,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             tbody.innerHTML = data.map(item => {
                 const statusHtml = renderStatusBadge(item.status);
+                const assignedHtml = renderAssignedToColumn(item);
                 const actionHtml = renderActionButtons(item);
                 return `
                 <tr>
@@ -248,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${item.welding_details}</td>
                     <td>${item.scheduled_time || 'As Scheduled'}</td>
                     <td>${statusHtml}</td>
-                    <td>${item.technician || item.sender_name}</td>
+                    <td>${assignedHtml}</td>
                     <td>${actionHtml}</td>
                 </tr>
             `}).join('');
@@ -275,6 +306,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return `<span class="badge status-open">${status}</span>`;
     }
 
+    function renderAssignedToColumn(item) {
+        const assigned = item.assigned_to || 'Unassigned';
+        if (currentUserRole === 'Manager') {
+            const options = MAINTENANCE_STAFF.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
+            return `
+                <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); max-width: 180px;">
+                    <option value="Unassigned" ${assigned === 'Unassigned' ? 'selected' : ''}>-- Unassigned --</option>
+                    ${options}
+                </select>
+            `;
+        }
+        return `<span class="badge" style="background: rgba(255,255,255,0.06); color: #e2e8f0; font-size:0.8rem;">${assigned}</span>`;
+    }
+
     function renderActionButtons(item) {
         const isResolved = item.status === 'RESOLVED' || item.status === 'REJECTED';
         const isPending = item.status === 'PENDING_APPROVAL';
@@ -283,6 +328,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<button class="btn btn-sm btn-outline" disabled>Closed</button>`;
         }
 
+        // OPERATOR/TECHNICIAN ROLE: NO RESOLVE/APPROVE RIGHTS!
+        if (currentUserRole === 'Operator') {
+            return `<button class="btn btn-sm btn-outline" disabled style="opacity:0.6;">Manager Rights Needed</button>`;
+        }
+
+        // MAINTENANCE MANAGER ROLE: HAS FULL APPROVE, REJECT, AND RESOLVE RIGHTS!
         if (currentUserRole === 'Manager' && isPending) {
             return `
                 <button class="btn btn-sm btn-emerald btn-approve-action" data-ticket="${item.ticket_number}" style="margin-right:4px;">Approve</button>
@@ -303,7 +354,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.ticket_number.toLowerCase().includes(searchVal) ||
                 item.equipment_id.toLowerCase().includes(searchVal) ||
                 item.issue_description.toLowerCase().includes(searchVal) ||
-                item.department.toLowerCase().includes(searchVal)
+                item.department.toLowerCase().includes(searchVal) ||
+                (item.assigned_to && item.assigned_to.toLowerCase().includes(searchVal))
             );
 
             let matchesStatus = true;
@@ -315,12 +367,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center">No breakdowns matching filter.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center">No breakdowns matching filter.</td></tr>';
             return;
         }
 
         tbody.innerHTML = filtered.map(item => {
             const statusHtml = renderStatusBadge(item.status);
+            const assignedHtml = renderAssignedToColumn(item);
             const actionHtml = renderActionButtons(item);
             const durationStr = item.status === 'RESOLVED' ? `${item.duration_minutes} mins` : '-';
             const endTimeStr = item.end_time ? item.end_time.slice(0, 16).replace('T', ' ') : '-';
@@ -332,6 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><strong>${item.equipment_id}</strong></td>
                     <td>${item.issue_description}</td>
                     <td>${statusHtml}</td>
+                    <td>${assignedHtml}</td>
                     <td>${item.start_time.slice(0, 16).replace('T', ' ')}</td>
                     <td>${endTimeStr}</td>
                     <td>${durationStr}</td>
@@ -375,6 +429,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || '' })
+                    });
+                    refreshAll();
+                } catch (err) { console.error(err); }
+            });
+        });
+
+        document.querySelectorAll('.btn-assign-staff').forEach(select => {
+            select.addEventListener('change', async (e) => {
+                const ticket = e.target.getAttribute('data-ticket');
+                const assignedTo = e.target.value;
+                try {
+                    await fetch('/api/ticket/assign', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticket_number: ticket, assigned_to: assignedTo })
                     });
                     refreshAll();
                 } catch (err) { console.error(err); }
@@ -492,7 +561,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btn-schedule-pm').addEventListener('click', () => {
             document.getElementById('modal-pm-eq').value = '';
             document.getElementById('modal-pm-desc').value = '';
-            document.getElementById('modal-pm-tech').value = currentUsername || '';
             if (pmModal) pmModal.classList.add('active');
         });
     }
@@ -509,7 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const eq = document.getElementById('modal-pm-eq').value.trim();
             const desc = document.getElementById('modal-pm-desc').value.trim();
             const time = document.getElementById('modal-pm-time').value.trim();
-            const tech = document.getElementById('modal-pm-tech').value.trim();
+            const assigned = document.getElementById('modal-pm-assigned').value;
 
             if (!eq || !desc) {
                 alert('Please enter equipment ID and PM activity description.');
@@ -525,7 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         equipment_id: eq,
                         activity_description: desc,
                         scheduled_time: time || 'Tomorrow 10 AM',
-                        technician: tech || currentUsername || 'Tech'
+                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Tech')
                     })
                 });
                 if (pmModal) pmModal.classList.remove('active');
@@ -540,7 +608,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btn-schedule-welding').addEventListener('click', () => {
             document.getElementById('modal-wd-eq').value = '';
             document.getElementById('modal-wd-details').value = '';
-            document.getElementById('modal-wd-tech').value = currentUsername || '';
             if (wdModal) wdModal.classList.add('active');
         });
     }
@@ -557,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const eq = document.getElementById('modal-wd-eq').value.trim();
             const details = document.getElementById('modal-wd-details').value.trim();
             const time = document.getElementById('modal-wd-time').value.trim();
-            const tech = document.getElementById('modal-wd-tech').value.trim();
+            const assigned = document.getElementById('modal-wd-assigned').value;
 
             if (!eq || !details) {
                 alert('Please enter equipment/structure name and welding work details.');
@@ -573,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         equipment_id: eq,
                         welding_details: details,
                         scheduled_time: time || 'Today 3 PM',
-                        technician: tech || currentUsername || 'Welder'
+                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Welder')
                     })
                 });
                 if (wdModal) wdModal.classList.remove('active');

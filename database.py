@@ -24,6 +24,7 @@ def init_db():
             start_time TEXT NOT NULL,
             end_time TEXT,
             status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
+            assigned_to TEXT DEFAULT 'Unassigned',
             duration_minutes INTEGER DEFAULT 0,
             resolution_notes TEXT,
             technician TEXT,
@@ -31,6 +32,10 @@ def init_db():
             created_at TEXT NOT NULL
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE breakdowns ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
+    except sqlite3.OperationalError:
+        pass
 
     # Preventive Maintenance table
     cursor.execute('''
@@ -44,6 +49,7 @@ def init_db():
             activity_description TEXT NOT NULL,
             scheduled_time TEXT,
             status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
+            assigned_to TEXT DEFAULT 'Unassigned',
             technician TEXT,
             performed_at TEXT NOT NULL,
             synced_to_sheets INTEGER DEFAULT 0
@@ -55,6 +61,10 @@ def init_db():
         pass
     try:
         cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN status TEXT DEFAULT 'PENDING_APPROVAL'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
     except sqlite3.OperationalError:
         pass
 
@@ -71,11 +81,16 @@ def init_db():
             welding_details TEXT NOT NULL,
             scheduled_time TEXT,
             status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
+            assigned_to TEXT DEFAULT 'Unassigned',
             technician TEXT,
             created_at TEXT NOT NULL,
             synced_to_sheets INTEGER DEFAULT 0
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE welding_logs ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
+    except sqlite3.OperationalError:
+        pass
 
     # System Settings table
     cursor.execute('''
@@ -106,7 +121,7 @@ def generate_ticket_number(prefix="BD"):
     conn.close()
     return f"{prefix}-{now_year}-{cnt:03d}"
 
-def log_breakdown(department, equipment_id, issue_description, sender_phone="", sender_name=""):
+def log_breakdown(department, equipment_id, issue_description, sender_phone="", sender_name="", assigned_to="Unassigned"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -115,9 +130,9 @@ def log_breakdown(department, equipment_id, issue_description, sender_phone="", 
     
     cursor.execute('''
         INSERT INTO breakdowns 
-        (ticket_number, department, sender_phone, sender_name, equipment_id, issue_description, start_time, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, issue_description, now_str, now_str))
+        (ticket_number, department, sender_phone, sender_name, equipment_id, issue_description, start_time, status, assigned_to, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
+    ''', (ticket, department, sender_phone, sender_name, equipment_id, issue_description, now_str, assigned_to or 'Unassigned', now_str))
     
     conn.commit()
     breakdown_id = cursor.lastrowid
@@ -182,7 +197,7 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
     conn.close()
     return dict(updated), None
 
-def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name=""):
+def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -191,15 +206,15 @@ def log_maintenance(department, equipment_id, activity_description, scheduled_ti
     
     cursor.execute('''
         INSERT INTO maintenance_logs
-        (ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, status, technician, performed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, technician or sender_name, now_str))
+        (ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, status, assigned_to, technician, performed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
+    ''', (ticket, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
     
     conn.commit()
     conn.close()
     return ticket
 
-def log_welding(department, equipment_id, location, welding_details, scheduled_time="", technician="", sender_phone="", sender_name=""):
+def log_welding(department, equipment_id, location, welding_details, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -208,13 +223,28 @@ def log_welding(department, equipment_id, location, welding_details, scheduled_t
     
     cursor.execute('''
         INSERT INTO welding_logs
-        (ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, technician, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, technician or sender_name, now_str))
+        (ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, assigned_to, technician, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
+    ''', (ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
     
     conn.commit()
     conn.close()
     return ticket
+
+def assign_ticket(ticket_number, assigned_to_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if ticket_number.startswith("BD-"):
+        cursor.execute("UPDATE breakdowns SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+    elif ticket_number.startswith("PM-"):
+        cursor.execute("UPDATE maintenance_logs SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+    elif ticket_number.startswith("WD-"):
+        cursor.execute("UPDATE welding_logs SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+        
+    conn.commit()
+    conn.close()
+    return True, f"Ticket {ticket_number} assigned to {assigned_to_name}."
 
 def approve_ticket(ticket_number, manager_name="Maintenance Manager"):
     conn = get_db_connection()
