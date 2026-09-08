@@ -154,7 +154,24 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         
     record = cursor.fetchone()
     
-    # 2. Check in welding_logs table if ticket_number starts with WD-
+    # 2. Check in maintenance_logs table if ticket_number starts with PM-
+    if not record and ticket_number and ticket_number.startswith("PM-"):
+        cursor.execute("SELECT * FROM maintenance_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (ticket_number,))
+        record = cursor.fetchone()
+        if record:
+            cursor.execute('''
+                UPDATE maintenance_logs 
+                SET status = 'RESOLVED',
+                    technician = ?
+                WHERE id = ?
+            ''', (technician or record['technician'], record['id']))
+            conn.commit()
+            cursor.execute("SELECT * FROM maintenance_logs WHERE id = ?", (record['id'],))
+            updated = cursor.fetchone()
+            conn.close()
+            return dict(updated), None
+
+    # 3. Check in welding_logs table if ticket_number starts with WD-
     if not record and ticket_number and ticket_number.startswith("WD-"):
         cursor.execute("SELECT * FROM welding_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (ticket_number,))
         record = cursor.fetchone()
