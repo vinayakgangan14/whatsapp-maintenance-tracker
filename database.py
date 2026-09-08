@@ -366,28 +366,31 @@ def get_statistics():
     mttr_minutes = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0.0
 
     # 2. MTBF (Mean Time Between Failures): Total Operating Time / Total Failures
-    # Calculate operating time based on plant tracking cycle (30 days baseline or elapsed time) minus total downtime
-    cursor.execute("SELECT MIN(created_at), MIN(start_time) FROM breakdowns")
-    row = cursor.fetchone()
-    earliest_str = row[0] or row[1] if row else None
-    
-    now = datetime.datetime.now()
-    if earliest_str:
-        try:
-            clean_str = str(earliest_str).strip().replace(' ', 'T')
-            if len(clean_str) > 19 and '.' not in clean_str and '+' not in clean_str and 'Z' not in clean_str:
-                clean_str = clean_str[:19]
-            earliest_dt = datetime.datetime.fromisoformat(clean_str)
-            elapsed_mins = (now - earliest_dt).total_seconds() / 60.0
-            tracking_window_mins = max(30 * 24 * 60.0, elapsed_mins)
-            operating_mins = max(1.0, tracking_window_mins - sum_downtime)
-        except Exception:
-            operating_mins = float(30 * 24 * 60 - sum_downtime)
+    if total_bd == 0:
+        mtbf_minutes = 0.0
+        mtbf_hours = 0.0
     else:
-        operating_mins = float(30 * 24 * 60)
+        cursor.execute("SELECT MIN(created_at), MIN(start_time) FROM breakdowns")
+        row = cursor.fetchone()
+        earliest_str = row[0] or row[1] if row else None
+        
+        now = datetime.datetime.now()
+        if earliest_str:
+            try:
+                clean_str = str(earliest_str).strip().replace(' ', 'T')
+                if len(clean_str) > 19 and '.' not in clean_str and '+' not in clean_str and 'Z' not in clean_str:
+                    clean_str = clean_str[:19]
+                earliest_dt = datetime.datetime.fromisoformat(clean_str)
+                elapsed_mins = (now - earliest_dt).total_seconds() / 60.0
+                tracking_window_mins = max(30 * 24 * 60.0, elapsed_mins)
+                operating_mins = max(1.0, tracking_window_mins - sum_downtime)
+            except Exception:
+                operating_mins = float(30 * 24 * 60 - sum_downtime)
+        else:
+            operating_mins = float(30 * 24 * 60)
 
-    mtbf_minutes = round(operating_mins / max(1, total_bd), 1) if total_bd > 0 else round(operating_mins, 1)
-    mtbf_hours = round(mtbf_minutes / 60.0, 1)
+        mtbf_minutes = round(operating_mins / total_bd, 1)
+        mtbf_hours = round(mtbf_minutes / 60.0, 1)
     
     cursor.execute("SELECT department, COUNT(*) as count FROM breakdowns GROUP BY department")
     dept_counts = {row['department']: row['count'] for row in cursor.fetchall()}
