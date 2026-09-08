@@ -2,11 +2,46 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // HELPER: PREVENT AUTO-REFRESH DOM DESTRUCTION ON ACTIVE DROPDOWNS
     // ----------------------------------------------------
+    let isInteractingWithDropdown = false;
+
+    document.addEventListener('focusin', (e) => {
+        if (e.target && (e.target.classList.contains('btn-assign-staff') || e.target.tagName === 'SELECT')) {
+            isInteractingWithDropdown = true;
+        }
+    });
+
+    document.addEventListener('focusout', (e) => {
+        if (e.target && (e.target.classList.contains('btn-assign-staff') || e.target.tagName === 'SELECT')) {
+            setTimeout(() => {
+                const active = document.activeElement;
+                if (!active || (active.tagName !== 'SELECT' && !active.classList.contains('btn-assign-staff'))) {
+                    isInteractingWithDropdown = false;
+                }
+            }, 300);
+        }
+    });
+
+    document.addEventListener('mousedown', (e) => {
+        if (e.target && (e.target.classList.contains('btn-assign-staff') || e.target.closest('.btn-assign-staff') || e.target.tagName === 'SELECT')) {
+            isInteractingWithDropdown = true;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        setTimeout(() => {
+            const active = document.activeElement;
+            if (!active || (active.tagName !== 'SELECT' && !active.classList.contains('btn-assign-staff'))) {
+                isInteractingWithDropdown = false;
+            }
+        }, 1200);
+    });
+
     function isUserInteractingWithTable(tbodyId) {
+        if (isInteractingWithDropdown) return true;
         const active = document.activeElement;
         if (!active) return false;
         const tbody = document.getElementById(tbodyId);
-        return tbody && tbody.contains(active);
+        return tbody && (tbody.contains(active) || active.tagName === 'SELECT' || active.tagName === 'INPUT');
     }
 
     // ----------------------------------------------------
@@ -435,6 +470,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('kpi-mttr').innerHTML = `${data.mttr_minutes} <small style="font-size: 1rem">mins</small>`;
             if (document.getElementById('kpi-mtbf')) {
                 document.getElementById('kpi-mtbf').innerHTML = `${data.mtbf_hours || 0} <small style="font-size: 1rem">hrs</small>`;
+            }
+            if (document.getElementById('kpi-mtbf-mins')) {
+                document.getElementById('kpi-mtbf-mins').innerText = `${data.mtbf_minutes || 0} mins between failures`;
             }
 
             initCharts(data);

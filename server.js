@@ -128,7 +128,7 @@ print(json.dumps({"message": "Database cleared successfully"}))
     res.json(data);
 });
 
-// Instant Breakdown Log (Non-blocking background Google Sheets sync)
+// Instant Breakdown Log
 app.post('/api/breakdowns/log', async (req, res) => {
     const { department, equipment_id, issue_description, sender_name } = req.body;
     const code = `
@@ -144,8 +144,8 @@ open_bds = database.get_open_breakdowns()
 matching = [b for b in open_bds if b['ticket_number'] == ticket]
 if matching:
     t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(matching[0],))
-    t.daemon = True
     t.start()
+    t.join(timeout=3.0)
 print(json.dumps({"ticket": ticket, "id": bd_id}))
     `;
     const data = await runPythonCode(code);
@@ -167,8 +167,8 @@ ticket = database.log_maintenance(
 )
 payload = {"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}}
 t = threading.Thread(target=google_sheets.sync_maintenance_to_sheet, args=(payload,))
-t.daemon = True
 t.start()
+t.join(timeout=3.0)
 print(json.dumps({"ticket": ticket}))
     `;
     const data = await runPythonCode(code);
@@ -179,7 +179,7 @@ print(json.dumps({"ticket": ticket}))
 app.post('/api/welding/log', async (req, res) => {
     const { department, equipment_id, welding_details, scheduled_time, technician } = req.body;
     const code = `
-import database, json
+import database, json, threading, google_sheets
 database.init_db()
 ticket = database.log_welding(
     department=${JSON.stringify(department || 'General')},
@@ -189,6 +189,9 @@ ticket = database.log_welding(
     scheduled_time=${JSON.stringify(scheduled_time || 'Today')},
     technician=${JSON.stringify(technician || 'Welder')}
 )
+t = threading.Thread(target=google_sheets.sync_all_records_batch)
+t.start()
+t.join(timeout=3.0)
 print(json.dumps({"ticket": ticket}))
     `;
     const data = await runPythonCode(code);
@@ -203,8 +206,8 @@ database.init_db()
 ok, msg = database.approve_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')})
 if ok:
     t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.daemon = True
     t.start()
+    t.join(timeout=3.0)
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
@@ -219,8 +222,8 @@ database.init_db()
 ok, msg = database.reject_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')}, ${JSON.stringify(reason || '')})
 if ok:
     t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.daemon = True
     t.start()
+    t.join(timeout=3.0)
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
@@ -235,8 +238,8 @@ database.init_db()
 ok, msg = database.assign_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(assigned_to || 'Unassigned')})
 if ok:
     t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.daemon = True
     t.start()
+    t.join(timeout=3.0)
 print(json.dumps({"ok": ok, "msg": msg}))
     `;
     const data = await runPythonCode(code);
@@ -262,8 +265,8 @@ updated, err = database.resolve_breakdown(
 )
 if updated:
     t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(updated,))
-    t.daemon = True
     t.start()
+    t.join(timeout=3.0)
 print(json.dumps({"updated": updated, "err": err}))
     `;
     const data = await runPythonCode(code);

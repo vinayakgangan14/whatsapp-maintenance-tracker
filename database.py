@@ -352,7 +352,7 @@ def get_statistics():
     
     cursor.execute("SELECT SUM(duration_minutes) as total_downtime FROM breakdowns WHERE status = 'RESOLVED'")
     sum_downtime = cursor.fetchone()['total_downtime'] or 0
-    
+
     cursor.execute("SELECT COUNT(*) as total_pm FROM maintenance_logs")
     total_pm = cursor.fetchone()['total_pm']
     
@@ -362,10 +362,29 @@ def get_statistics():
     cursor.execute("SELECT COUNT(*) as open_wd FROM welding_logs WHERE status != 'RESOLVED' AND status != 'REJECTED'")
     open_wd = cursor.fetchone()['open_wd']
     
-    mttr = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0
+    # 1. MTTR (Mean Time To Repair in Minutes): Total Downtime / Resolved Breakdowns
+    mttr_minutes = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0.0
+
+    # 2. MTBF (Mean Time Between Failures): Total Operating Time / Total Failures
+    # Calculate operating time from earliest ticket creation timestamp to current time
+    cursor.execute("SELECT MIN(created_at), MIN(start_time) FROM breakdowns")
+    row = cursor.fetchone()
+    earliest_str = row[0] or row[1] if row else None
     
-    operating_hours = max(1, (30 * 24) - (sum_downtime / 60))
-    mtbf_hours = round(operating_hours / max(1, total_bd), 1) if total_bd > 0 else round(30 * 24, 1)
+    now = datetime.datetime.now()
+    if earliest_str:
+        try:
+            clean_str = str(earliest_str).strip().replace(' ', 'T')
+            earliest_dt = datetime.datetime.fromisoformat(clean_str)
+            total_elapsed_mins = max(1.0, (now - earliest_dt).total_seconds() / 60.0)
+            operating_mins = max(1.0, total_elapsed_mins - sum_downtime)
+        except Exception:
+            operating_mins = float(30 * 24 * 60 - sum_downtime)
+    else:
+        operating_mins = float(30 * 24 * 60)
+
+    mtbf_minutes = round(operating_mins / max(1, total_bd), 1) if total_bd > 0 else round(operating_mins, 1)
+    mtbf_hours = round(mtbf_minutes / 60.0, 1)
     
     cursor.execute("SELECT department, COUNT(*) as count FROM breakdowns GROUP BY department")
     dept_counts = {row['department']: row['count'] for row in cursor.fetchall()}
@@ -377,8 +396,9 @@ def get_statistics():
         "pending_breakdowns": pending_bd,
         "resolved_breakdowns": resolved_bd,
         "total_downtime_minutes": sum_downtime,
-        "total_downtime_hours": round(sum_downtime / 60, 2),
-        "mttr_minutes": mttr,
+        "total_downtime_hours": round(sum_downtime / 60.0, 2),
+        "mttr_minutes": mttr_minutes,
+        "mtbf_minutes": mtbf_minutes,
         "mtbf_hours": mtbf_hours,
         "total_pm_logs": total_pm,
         "total_welding_logs": total_wd,
