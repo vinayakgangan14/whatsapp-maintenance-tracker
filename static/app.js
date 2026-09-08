@@ -292,11 +292,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // CHARTS INITIALIZATION
     // ----------------------------------------------------
+    function switchTab(targetTab) {
+        const navItems = document.querySelectorAll('.nav-item');
+        const tabPanes = document.querySelectorAll('.tab-pane');
+
+        navItems.forEach(n => {
+            if (n.getAttribute('data-tab') === targetTab) {
+                n.classList.add('active');
+            } else {
+                n.classList.remove('active');
+            }
+        });
+
+        tabPanes.forEach(p => {
+            if (p.id === targetTab) {
+                p.classList.add('active');
+            } else {
+                p.classList.remove('active');
+            }
+        });
+    }
+
     let deptChart = null;
     let ratioChart = null;
 
     function initCharts(stats) {
-        const deptCtx = document.getElementById('chartDepartment').getContext('2d');
+        const deptCanvas = document.getElementById('chartDepartment');
+        if (!deptCanvas) return;
+        const deptCtx = deptCanvas.getContext('2d');
         const deptLabels = Object.keys(stats.department_distribution || {});
         const deptData = Object.values(stats.department_distribution || {});
 
@@ -304,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deptChart = new Chart(deptCtx, {
             type: 'doughnut',
             data: {
-                labels: deptLabels.length ? deptLabels : ['No Incidents'],
+                labels: deptLabels.length ? deptLabels : ['No Breakdowns'],
                 datasets: [{
                     data: deptData.length ? deptData : [1],
                     backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'],
@@ -315,17 +338,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#9ca3af', font: { family: 'Inter' } } }
+                    legend: { labels: { color: '#9ca3af', font: { family: 'Inter' } } },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => ` ${context.label}: ${context.raw} tickets (Click slice to view logs)`
+                        }
+                    }
+                },
+                onClick: (evt, activeElements) => {
+                    if (activeElements && activeElements.length > 0) {
+                        const index = activeElements[0].index;
+                        const dept = deptLabels[index];
+                        if (dept && dept !== 'No Breakdowns') {
+                            switchTab('tab-breakdowns');
+                            const searchBox = document.getElementById('table-search');
+                            if (searchBox) searchBox.value = dept;
+                            const statusFilter = document.getElementById('status-filter');
+                            if (statusFilter) statusFilter.value = 'ALL';
+                            loadBreakdowns(true);
+                        }
+                    }
                 }
             }
         });
 
-        const ratioCtx = document.getElementById('chartRatio').getContext('2d');
+        const ratioCanvas = document.getElementById('chartRatio');
+        if (!ratioCanvas) return;
+        const ratioCtx = ratioCanvas.getContext('2d');
         if (ratioChart) ratioChart.destroy();
         ratioChart = new Chart(ratioCtx, {
             type: 'bar',
             data: {
-                labels: ['Open Incidents', 'Resolved Tickets', 'PM Activities'],
+                labels: ['Open Tickets', 'Resolved Tickets', 'PM Activities'],
                 datasets: [{
                     label: 'Count',
                     data: [stats.open_breakdowns, stats.resolved_breakdowns, stats.total_pm_logs],
@@ -337,11 +381,40 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => ` ${context.label}: ${context.raw} (Click bar to open section)`
+                        }
+                    }
                 },
                 scales: {
                     x: { ticks: { color: '#9ca3af' }, grid: { display: false } },
                     y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                },
+                onClick: (evt, activeElements) => {
+                    if (activeElements && activeElements.length > 0) {
+                        const index = activeElements[0].index;
+                        const label = ['Open Tickets', 'Resolved Tickets', 'PM Activities'][index];
+                        if (label === 'Open Tickets') {
+                            switchTab('tab-breakdowns');
+                            const searchBox = document.getElementById('table-search');
+                            if (searchBox) searchBox.value = '';
+                            const statusFilter = document.getElementById('status-filter');
+                            if (statusFilter) statusFilter.value = 'OPEN';
+                            loadBreakdowns(true);
+                        } else if (label === 'Resolved Tickets') {
+                            switchTab('tab-breakdowns');
+                            const searchBox = document.getElementById('table-search');
+                            if (searchBox) searchBox.value = '';
+                            const statusFilter = document.getElementById('status-filter');
+                            if (statusFilter) statusFilter.value = 'RESOLVED';
+                            loadBreakdowns(true);
+                        } else if (label === 'PM Activities') {
+                            switchTab('tab-pm');
+                            loadPM(true);
+                        }
+                    }
                 }
             }
         });

@@ -120,7 +120,7 @@ def restore_database_from_sheets():
                 status_val = str(row[4]).strip() if str(row[4]).strip() else 'OPEN'
 
                 cursor.execute('''
-                    INSERT OR REPLACE INTO breakdowns
+                    INSERT OR IGNORE INTO breakdowns
                     (ticket_number, department, equipment_id, issue_description,
                      status, start_time, end_time, duration_minutes,
                      resolution_notes, technician, created_at, synced_to_sheets)
@@ -134,7 +134,7 @@ def restore_database_from_sheets():
 
             elif ticket.startswith("PM-"):
                 cursor.execute('''
-                    INSERT OR REPLACE INTO maintenance_logs
+                    INSERT OR IGNORE INTO maintenance_logs
                     (ticket_number, department, equipment_id, activity_description,
                      technician, performed_at, synced_to_sheets)
                     VALUES (?, ?, ?, ?, ?, ?, 1)
@@ -144,7 +144,7 @@ def restore_database_from_sheets():
             elif ticket.startswith("WD-"):
                 status_val = str(row[4]).strip() if str(row[4]).strip() else 'OPEN'
                 cursor.execute('''
-                    INSERT OR REPLACE INTO welding_logs
+                    INSERT OR IGNORE INTO welding_logs
                     (ticket_number, department, equipment_id, welding_details,
                      status, technician, created_at, synced_to_sheets)
                     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
