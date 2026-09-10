@@ -319,10 +319,4 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, async () => {
     console.log(`🚀 Maintenance Portal running on port ${PORT}`);
-    try {
-        await runPythonCode('import google_sheets; google_sheets.restore_database_from_sheets()');
-        console.log('[Pure Portal] Startup database restore completed.');
-    } catch (e) {
-        console.error('[Pure Portal] Database restore skipped:', e);
-    }
 });
