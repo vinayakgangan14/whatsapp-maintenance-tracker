@@ -461,3 +461,38 @@ def sync_all_records_batch():
     except Exception as e:
         logger.error(f"Batch sync error: {e}")
         return False, str(e)
+
+
+def clear_google_sheet_records():
+    """
+    Clears all data rows (A2:K1000) in Google Sheets when Administrator resets the database for client handover.
+    """
+    service = get_sheets_service()
+    if not service:
+        return False, "No Google Sheets credentials configured."
+
+    spreadsheet_id, sheet_name = _get_spreadsheet_info()
+    if not spreadsheet_id:
+        return False, "No spreadsheet ID configured."
+
+    try:
+        range_name = _safe_range(sheet_name, "A2:K1000")
+        try:
+            service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body={}
+            ).execute()
+        except Exception:
+            sheet_name = _get_first_tab_name(service, spreadsheet_id)
+            range_name = _safe_range(sheet_name, "A2:K1000")
+            service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body={}
+            ).execute()
+
+        return True, "Google Sheets cleared successfully."
+    except Exception as e:
+        logger.error(f"Error clearing Google Sheets: {e}")
+        return False, str(e)

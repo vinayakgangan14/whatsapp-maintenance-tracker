@@ -116,13 +116,14 @@ else:
     res.json(data.raw ? { error: data.raw } : data);
 });
 
-// Clear all database records for client handover
+// Clear all database records and Google Sheets for client handover
 app.post('/api/reset-database', async (req, res) => {
     const code = `
-import database, json
+import database, json, google_sheets
 database.init_db()
 database.clear_all_records()
-print(json.dumps({"message": "Database cleared successfully"}))
+sheet_ok, sheet_msg = google_sheets.clear_google_sheet_records()
+print(json.dumps({"message": "Database and Google Sheets cleared successfully", "sheets_cleared": sheet_ok}))
     `;
     const data = await runPythonCode(code);
     res.json(data);
