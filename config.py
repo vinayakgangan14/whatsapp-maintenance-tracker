@@ -18,4 +18,6 @@ DEFAULT_CONFIG = {
     "TWILIO_ACCOUNT_SID": os.getenv("TWILIO_ACCOUNT_SID", ""),
     "TWILIO_AUTH_TOKEN": os.getenv("TWILIO_AUTH_TOKEN", ""),
     "TWILIO_PHONE_NUMBER": os.getenv("TWILIO_PHONE_NUMBER", ""),
+    "SUPABASE_URL": os.getenv("SUPABASE_URL", "https://durbufowkgwimbmsunsq.supabase.co"),
+    "SUPABASE_ANON_KEY": os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR1cmJ1Zm93a2d3aW1ibXN1bnNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA2NzUzMzgsImV4cCI6MjEwNjI1MTMzOH0.u3w4eumVQKpoQ4ZsV30JKpQR-Kgmns2iEiJeJDsFPPw")
 }

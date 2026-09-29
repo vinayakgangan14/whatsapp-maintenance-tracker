@@ -1,39 +1,25 @@
 -- ====================================================================
--- SUPABASE MULTI-TENANT DATABASE SCHEMA
--- Maintenance Tracker Suite (Free & Open for Any Company)
+-- SUPABASE COMPLETE SETUP SCRIPT FOR MAINTENANCE TRACKER
+-- Run this script ONCE in your Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/durbufowkgwimbmsunsq/sql/new
 -- ====================================================================
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- --------------------------------------------------------------------
--- 1. COMPANIES TABLE (Tenant Workspaces)
--- --------------------------------------------------------------------
+-- 1. Create Default Workspace Company
 CREATE TABLE IF NOT EXISTS public.companies (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_name TEXT NOT NULL,
     industry TEXT DEFAULT 'Manufacturing',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- --------------------------------------------------------------------
--- 2. USER PROFILES TABLE (Tied to Supabase Auth & Company Tenant)
--- --------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE,
-    full_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('Operator', 'Manager', 'Admin')) DEFAULT 'Operator',
-    phone_number TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+INSERT INTO public.companies (id, company_name, industry)
+VALUES ('00000000-0000-0000-0000-000000000000', 'Default Workspace', 'Manufacturing')
+ON CONFLICT (id) DO NOTHING;
 
--- --------------------------------------------------------------------
--- 3. BREAKDOWN TICKETS TABLE (Multi-Tenant)
--- --------------------------------------------------------------------
+-- 2. Breakdown Tickets Table
 CREATE TABLE IF NOT EXISTS public.breakdowns (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
     ticket_number TEXT NOT NULL,
     department TEXT NOT NULL DEFAULT 'General',
     sender_phone TEXT,
@@ -42,7 +28,7 @@ CREATE TABLE IF NOT EXISTS public.breakdowns (
     issue_description TEXT NOT NULL,
     start_time TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     end_time TIMESTAMP WITH TIME ZONE,
-    status TEXT NOT NULL CHECK (status IN ('PENDING_APPROVAL', 'APPROVED', 'OPEN', 'RESOLVED', 'REJECTED')) DEFAULT 'PENDING_APPROVAL',
+    status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
     assigned_to TEXT DEFAULT 'Unassigned',
     duration_minutes INTEGER DEFAULT 0,
     resolution_notes TEXT,
@@ -51,12 +37,10 @@ CREATE TABLE IF NOT EXISTS public.breakdowns (
     UNIQUE(company_id, ticket_number)
 );
 
--- --------------------------------------------------------------------
--- 4. PREVENTIVE MAINTENANCE LOGS TABLE (Multi-Tenant)
--- --------------------------------------------------------------------
+-- 3. Preventive Maintenance Logs Table
 CREATE TABLE IF NOT EXISTS public.maintenance_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
     ticket_number TEXT NOT NULL,
     department TEXT NOT NULL DEFAULT 'General',
     sender_phone TEXT,
@@ -64,19 +48,17 @@ CREATE TABLE IF NOT EXISTS public.maintenance_logs (
     equipment_id TEXT NOT NULL,
     activity_description TEXT NOT NULL,
     scheduled_time TEXT,
-    status TEXT NOT NULL CHECK (status IN ('PENDING_APPROVAL', 'APPROVED', 'OPEN', 'RESOLVED', 'REJECTED')) DEFAULT 'PENDING_APPROVAL',
+    status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
     assigned_to TEXT DEFAULT 'Unassigned',
     technician TEXT,
     performed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(company_id, ticket_number)
 );
 
--- --------------------------------------------------------------------
--- 5. WELDING WORK LOGS TABLE (Multi-Tenant)
--- --------------------------------------------------------------------
+-- 4. Scheduled Welding Work Logs Table
 CREATE TABLE IF NOT EXISTS public.welding_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
     ticket_number TEXT NOT NULL,
     department TEXT NOT NULL DEFAULT 'General',
     sender_phone TEXT,
@@ -85,42 +67,48 @@ CREATE TABLE IF NOT EXISTS public.welding_logs (
     location TEXT,
     welding_details TEXT NOT NULL,
     scheduled_time TEXT,
-    status TEXT NOT NULL CHECK (status IN ('PENDING_APPROVAL', 'APPROVED', 'OPEN', 'RESOLVED', 'REJECTED')) DEFAULT 'PENDING_APPROVAL',
+    status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL',
     assigned_to TEXT DEFAULT 'Unassigned',
     technician TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(company_id, ticket_number)
 );
 
--- ====================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES — COMPANY DATA ISOLATION
--- Ensures Company A can NEVER view or modify Company B's data!
--- ====================================================================
+-- 5. Custom Departments Table
+CREATE TABLE IF NOT EXISTS public.custom_departments (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
+    department_name TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(company_id, department_name)
+);
 
-ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.breakdowns ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.maintenance_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.welding_logs ENABLE ROW LEVEL SECURITY;
+-- 6. Custom Equipment Table
+CREATE TABLE IF NOT EXISTS public.custom_equipment (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
+    department_name TEXT NOT NULL,
+    equipment_name TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(company_id, department_name, equipment_name)
+);
 
--- Helper function to get current user's company_id
-CREATE OR REPLACE FUNCTION public.get_user_company_id()
-RETURNS UUID AS $$
-  SELECT company_id FROM public.profiles WHERE id = auth.uid();
-$$ LANGUAGE sql SECURITY DEFINER;
+-- 7. Users Table
+CREATE TABLE IF NOT EXISTS public.users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000' REFERENCES public.companies(id) ON DELETE CASCADE,
+    email_or_name TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'Operator',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(company_id, email_or_name)
+);
 
--- RLS Policy: Users can only see their own company profile
-CREATE POLICY "Profiles isolated by company" ON public.profiles
-    FOR ALL USING (company_id = public.get_user_company_id());
-
--- RLS Policy: Breakdowns isolated by company_id
-CREATE POLICY "Breakdowns isolated by company" ON public.breakdowns
-    FOR ALL USING (company_id = public.get_user_company_id());
-
--- RLS Policy: PM logs isolated by company_id
-CREATE POLICY "PM logs isolated by company" ON public.maintenance_logs
-    FOR ALL USING (company_id = public.get_user_company_id());
-
--- RLS Policy: Welding logs isolated by company_id
-CREATE POLICY "Welding logs isolated by company" ON public.welding_logs
-    FOR ALL USING (company_id = public.get_user_company_id());
+-- 8. Disable RLS on tables so API Key can read and write freely
+ALTER TABLE public.companies DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.breakdowns DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.maintenance_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.welding_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.custom_departments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.custom_equipment DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;

@@ -4,7 +4,7 @@ import os
 import json
 import urllib.request
 import urllib.parse
-from config import DB_PATH
+from config import DB_PATH, DEFAULT_CONFIG
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -19,12 +19,17 @@ def sync_to_supabase(table_name, record_dict):
     """
     Pushes/upserts a record into Supabase REST API if SUPABASE_URL & key are configured.
     """
-    supabase_url = (os.getenv("SUPABASE_URL") or get_setting("SUPABASE_URL", "")).rstrip("/")
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or
+        get_setting("SUPABASE_URL", "") or
+        DEFAULT_CONFIG.get("SUPABASE_URL", "")
+    ).rstrip("/")
     supabase_key = (
         os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
         os.getenv("SUPABASE_ANON_KEY") or
         os.getenv("SUPABASE_KEY") or
-        get_setting("SUPABASE_ANON_KEY", "")
+        get_setting("SUPABASE_ANON_KEY", "") or
+        DEFAULT_CONFIG.get("SUPABASE_ANON_KEY", "")
     )
     
     if not supabase_url or not supabase_key:
@@ -34,12 +39,14 @@ def sync_to_supabase(table_name, record_dict):
         endpoint = f"{supabase_url}/rest/v1/{table_name}"
         payload = dict(record_dict)
         
-        # Strip local SQLite internal flags if needed
+        # Strip local SQLite internal flags and autoincrement id
         payload.pop("synced_to_sheets", None)
+        payload.pop("id", None)
         
-        # Ensure company_id is present
-        if "company_id" not in payload:
-            payload["company_id"] = "default"
+        # Ensure company_id is a valid UUID string
+        comp = payload.get("company_id")
+        if not comp or comp == "default":
+            payload["company_id"] = "00000000-0000-0000-0000-000000000000"
             
         data_bytes = json.dumps(payload).encode("utf-8")
         
@@ -61,12 +68,17 @@ def delete_from_supabase(table_name, query_params):
     """
     Deletes record(s) from Supabase REST API matching query_params dict.
     """
-    supabase_url = (os.getenv("SUPABASE_URL") or get_setting("SUPABASE_URL", "")).rstrip("/")
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or
+        get_setting("SUPABASE_URL", "") or
+        DEFAULT_CONFIG.get("SUPABASE_URL", "")
+    ).rstrip("/")
     supabase_key = (
         os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
         os.getenv("SUPABASE_ANON_KEY") or
         os.getenv("SUPABASE_KEY") or
-        get_setting("SUPABASE_ANON_KEY", "")
+        get_setting("SUPABASE_ANON_KEY", "") or
+        DEFAULT_CONFIG.get("SUPABASE_ANON_KEY", "")
     )
     
     if not supabase_url or not supabase_key:
