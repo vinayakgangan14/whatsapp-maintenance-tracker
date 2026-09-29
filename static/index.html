@@ -91,6 +91,9 @@
                 <button class="nav-item" data-tab="tab-welding">
                     <span class="nav-icon">🔥</span> Welding Work Logs
                 </button>
+                <button class="nav-item" data-tab="tab-plant-config">
+                    <span class="nav-icon">🏭</span> Plant & Equipment Setup
+                </button>
                 <button class="nav-item" data-tab="tab-sheets">
                     <span class="nav-icon">📗</span> Sheets & Excel Sync
                 </button>
@@ -341,7 +344,51 @@
                 </div>
             </section>
 
-            <!-- TAB 6: SETTINGS & HANDOVER -->
+            <!-- TAB 6: PLANT & EQUIPMENT SETUP -->
+            <section id="tab-plant-config" class="tab-pane">
+                <div class="glass-card" style="margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <h3 style="margin: 0;">🏭 Plant & Equipment Management Panel</h3>
+                            <p class="text-muted" style="margin: 0;">Customize your company's departments, machinery, and equipment list.</p>
+                        </div>
+                        <button class="btn btn-outline" id="btn-seed-template" style="border-color: #10b981; color: #10b981;">⚡ Load Industry Standard Template</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem;">
+                        <!-- DEPARTMENT MANAGEMENT -->
+                        <div style="background: rgba(0,0,0,0.3); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                            <h4 style="margin-top:0; margin-bottom: 0.75rem; color: #10b981;">1. Add / Manage Departments</h4>
+                            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                                <input type="text" id="cfg-new-dept-name" placeholder="e.g. Packaging Line B" style="flex: 1; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                                <button class="btn btn-emerald" id="btn-add-dept">+ Add</button>
+                            </div>
+                            <div id="cfg-dept-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto;">
+                                <small class="text-muted">Loading departments...</small>
+                            </div>
+                        </div>
+
+                        <!-- EQUIPMENT MANAGEMENT -->
+                        <div style="background: rgba(0,0,0,0.3); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                            <h4 style="margin-top:0; margin-bottom: 0.75rem; color: #3b82f6;">2. Add Equipment to Department</h4>
+                            <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+                                <select id="cfg-eq-dept-select" class="form-control" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                                    <option value="">-- Select Department --</option>
+                                </select>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="text" id="cfg-new-eq-name" placeholder="e.g. Conveyor Belt #4" style="flex: 1; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                                    <button class="btn" id="btn-add-eq" style="background: #3b82f6; color: #fff;">+ Add Machine</button>
+                                </div>
+                            </div>
+                            <div id="cfg-eq-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto;">
+                                <small class="text-muted">Select a department above to view equipment list.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB 7: SETTINGS & HANDOVER -->
             <section id="tab-settings" class="tab-pane">
                 <div class="glass-card" style="border-left: 4px solid #ef4444;">
                     <h3>🧹 Client Handover — Clear All Test Data</h3>

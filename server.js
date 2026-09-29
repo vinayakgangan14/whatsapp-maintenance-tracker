@@ -313,6 +313,83 @@ print(json.dumps({
     res.json(data.raw ? {} : data);
 });
 
+// --------------------------------------------------------------------
+// DYNAMIC PLANT & EQUIPMENT CONFIGURATION ENDPOINTS
+// --------------------------------------------------------------------
+
+app.get('/api/config/departments', async (req, res) => {
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+print(json.dumps(database.get_custom_departments()))
+    `);
+    res.json(Array.isArray(data) ? data : []);
+});
+
+app.post('/api/config/departments', async (req, res) => {
+    const { department_name } = req.body;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+res = database.add_custom_department(${JSON.stringify(department_name || '')})
+print(json.dumps({"success": bool(res)}))
+    `);
+    res.json(data);
+});
+
+app.delete('/api/config/departments/:id', async (req, res) => {
+    const deptId = req.params.id;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+database.delete_custom_department(${parseInt(deptId, 10)})
+print(json.dumps({"success": True}))
+    `);
+    res.json(data);
+});
+
+app.get('/api/config/equipment', async (req, res) => {
+    const dept = req.query.department || '';
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+print(json.dumps(database.get_custom_equipment(${dept ? JSON.stringify(dept) : 'None'})))
+    `);
+    res.json(Array.isArray(data) ? data : []);
+});
+
+app.post('/api/config/equipment', async (req, res) => {
+    const { department_name, equipment_name } = req.body;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+res = database.add_custom_equipment(${JSON.stringify(department_name || '')}, ${JSON.stringify(equipment_name || '')})
+print(json.dumps({"success": bool(res)}))
+    `);
+    res.json(data);
+});
+
+app.delete('/api/config/equipment/:id', async (req, res) => {
+    const eqId = req.params.id;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+database.delete_custom_equipment(${parseInt(eqId, 10)})
+print(json.dumps({"success": True}))
+    `);
+    res.json(data);
+});
+
+app.post('/api/config/seed-template', async (req, res) => {
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+database.seed_default_plant_config()
+print(json.dumps({"success": True}))
+    `);
+    res.json(data);
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });

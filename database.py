@@ -100,8 +100,32 @@ def init_db():
         )
     ''')
 
+    # Custom Departments Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS custom_departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
+            department_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(company_id, department_name)
+        )
+    ''')
+
+    # Custom Equipment Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS custom_equipment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
+            department_name TEXT NOT NULL,
+            equipment_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(company_id, department_name, equipment_name)
+        )
+    ''')
+
     conn.commit()
     conn.close()
+    seed_default_plant_config()
 
 def generate_ticket_number(prefix="BD"):
     conn = get_db_connection()
@@ -436,6 +460,105 @@ def clear_all_records():
     conn.commit()
     conn.close()
     return True
+
+# --------------------------------------------------------------------
+# DYNAMIC PLANT & EQUIPMENT MANAGEMENT FUNCTIONS
+# --------------------------------------------------------------------
+
+def get_custom_departments(company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, department_name FROM custom_departments WHERE company_id = ? ORDER BY department_name ASC", (company_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def add_custom_department(department_name, company_id='default'):
+    if not department_name or not department_name.strip():
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.datetime.now().isoformat()
+    try:
+        cursor.execute("INSERT OR IGNORE INTO custom_departments (company_id, department_name, created_at) VALUES (?, ?, ?)",
+                       (company_id, department_name.strip(), now_str))
+        conn.commit()
+        dept_id = cursor.lastrowid
+        conn.close()
+        return dept_id
+    except Exception as e:
+        conn.close()
+        return False
+
+def delete_custom_department(dept_id, company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT department_name FROM custom_departments WHERE id = ? AND company_id = ?", (dept_id, company_id))
+    row = cursor.fetchone()
+    if row:
+        dept_name = row['department_name']
+        cursor.execute("DELETE FROM custom_equipment WHERE department_name = ? AND company_id = ?", (dept_name, company_id))
+        cursor.execute("DELETE FROM custom_departments WHERE id = ? AND company_id = ?", (dept_id, company_id))
+        conn.commit()
+    conn.close()
+    return True
+
+def get_custom_equipment(department_name=None, company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if department_name:
+        cursor.execute("SELECT id, department_name, equipment_name FROM custom_equipment WHERE company_id = ? AND department_name = ? ORDER BY equipment_name ASC", (company_id, department_name))
+    else:
+        cursor.execute("SELECT id, department_name, equipment_name FROM custom_equipment WHERE company_id = ? ORDER BY department_name, equipment_name ASC", (company_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def add_custom_equipment(department_name, equipment_name, company_id='default'):
+    if not department_name or not equipment_name or not equipment_name.strip():
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.datetime.now().isoformat()
+    try:
+        cursor.execute("INSERT OR IGNORE INTO custom_equipment (company_id, department_name, equipment_name, created_at) VALUES (?, ?, ?, ?)",
+                       (company_id, department_name.strip(), equipment_name.strip(), now_str))
+        conn.commit()
+        eq_id = cursor.lastrowid
+        conn.close()
+        return eq_id
+    except Exception as e:
+        conn.close()
+        return False
+
+def delete_custom_equipment(equipment_id, company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM custom_equipment WHERE id = ? AND company_id = ?", (equipment_id, company_id))
+    conn.commit()
+    conn.close()
+    return True
+
+def seed_default_plant_config(company_id='default'):
+    """Seeds starter standard industry departments and equipment if empty."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as cnt FROM custom_departments WHERE company_id = ?", (company_id,))
+    if cursor.fetchone()['cnt'] == 0:
+        now_str = datetime.datetime.now().isoformat()
+        defaults = {
+            "Utility & Power": ["Main Transformer 33kVA", "Diesel Generator 500kVA", "Steam Boiler #1", "Air Compressor #1", "DM Water Treatment"],
+            "Processing & Production": ["Reactor Vessel #1", "Mixing Blender #1", "Holding Tank #2", "Homogenizer Pump"],
+            "Packaging & Bottling": ["Filling & Capping Machine", "Labeling Line #1", "Carton Sealer #2", "Conveyor Line #3"],
+            "Plastics & Molding": ["Injection Molding Machine #1", "Blow Molding Machine", "UV Printing Line"],
+            "General Facilities": ["HVAC Chiller", "Fire Hydrant Pump", "Effluent Treatment Plant (ETP)"]
+        }
+        for dept, items in defaults.items():
+            cursor.execute("INSERT OR IGNORE INTO custom_departments (company_id, department_name, created_at) VALUES (?, ?, ?)", (company_id, dept, now_str))
+            for eq in items:
+                cursor.execute("INSERT OR IGNORE INTO custom_equipment (company_id, department_name, equipment_name, created_at) VALUES (?, ?, ?, ?)", (company_id, dept, eq, now_str))
+        conn.commit()
+    conn.close()
 
 if __name__ == "__main__":
     init_db()

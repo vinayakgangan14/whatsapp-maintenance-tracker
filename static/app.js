@@ -47,100 +47,215 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // PLANT & EQUIPMENT BY DEPARTMENT MAPPING
     // ----------------------------------------------------
-    const EQUIPMENT_BY_PLANT = {
-        "Utility": [
-            "NEPA 33KVA TRANSFORMER",
-            "CAT GG-1218 KVA",
-            "CAT GG-600 KVA",
-            "PERKINS GG-500 KVA",
-            "CAT DG-1100 KVA",
-            "PERKINS DG-500 KVA",
-            "LT ROOM",
-            "STEAM BOILER -1",
-            "STEAM BOILER -2",
-            "THERMIC BOILER -3",
-            "HERZT COMPRESSOR",
-            "ELGI COMPRESSOR",
-            "FIRE HYDRATANT SYSTEM",
-            "COOLING TOWER",
-            "DM WATER PLANT",
-            "ETP PLANT"
-        ],
-        "LCP/PU": [
-            "LCP REACTOR-1",
-            "LCP REACTOR-2",
-            "PU REACTOR-1",
-            "PU REACTOR-2",
-            "PU REACTOR-3",
-            "PU REACTOR-4",
-            "PU REACTOR-5",
-            "TOP GIT FILLING / CAPPING MACHINE",
-            "TOP GUM FILLING / LABELLING MACHINE"
-        ],
-        "PVAC": [
-            "PVAC-1 REACTOR-1",
-            "PVAC-1 REACTOR-2",
-            "PROCESSSING VESSEL -1",
-            "PROCESSSING VESSEL -2",
-            "HOLDING TANK( 1,2 & 3)",
-            "TOPBOUND PRODUCTION LINE-1 (10-20 KG)",
-            "TOPBOUND PRODUCTION LINE-2 (2-10 KG)",
-            "TOPBOUND PRODUCTION LINE-3 (100G-1 KG)",
-            "TOPBOUND PRODUCTION LINE-4 (250G-1 KG)"
-        ],
-        "PVAC Extension": [
-            "PVAC-2 REACTOR-1 (5KL)",
-            "PVAC-2 BLENDER-2 (20KL)"
-        ],
-        "DCP": [
-            "SAND PLANT",
-            "BLENDER -2",
-            "BLENDER -3",
-            "BLENDER -4",
-            "BLENDER -5",
-            "BLENDER -6"
-        ],
-        "Plastic": [
-            "1LTR-1",
-            "1LTR-2",
-            "2LTR-DH",
-            "1LTR.DH",
-            "5LTR.S/S",
-            "5LTR-DH",
-            "IBM(Injection Blow Molding)",
-            "Omega-1",
-            "Omega-2",
-            "Omega-3",
-            "Hydron-1",
-            "Hydron-2",
-            "SP750 Printing Machine",
-            "SPVL1OOO Printing Machine",
-            "TECHNO PRINT 5 kg",
-            "TECHNO PRINT 10 kg",
-            "UV Printing Machine"
-        ]
-    };
+    // ----------------------------------------------------
+    // DYNAMIC PLANT & EQUIPMENT CONFIGURATION LOGIC
+    // ----------------------------------------------------
+    let cachedDepartments = [];
+    let cachedEquipmentMap = {};
 
-    function updateEquipmentOptions(plantSelectId, equipmentSelectId) {
+    async function loadDynamicDepartmentsAndEquipment() {
+        try {
+            const deptsRes = await fetch('/api/config/departments');
+            const deptsData = await deptsRes.json();
+            cachedDepartments = Array.isArray(deptsData) ? deptsData : [];
+
+            const eqRes = await fetch('/api/config/equipment');
+            const eqData = await eqRes.json();
+            
+            cachedEquipmentMap = {};
+            if (Array.isArray(eqData)) {
+                eqData.forEach(item => {
+                    if (!cachedEquipmentMap[item.department_name]) {
+                        cachedEquipmentMap[item.department_name] = [];
+                    }
+                    cachedEquipmentMap[item.department_name].push(item);
+                });
+            }
+
+            populateAllDepartmentDropdowns();
+            renderPlantSetupPanel();
+        } catch (err) {
+            console.error('Error loading dynamic plant config:', err);
+        }
+    }
+
+    function populateAllDepartmentDropdowns() {
+        const plantSelectors = ['modal-bd-plant', 'modal-pm-plant', 'modal-wd-plant', 'cfg-eq-dept-select'];
+        const optionsHtml = cachedDepartments.length ?
+            cachedDepartments.map(d => `<option value="${d.department_name}">${d.department_name}</option>`).join('') :
+            '<option value="General">General Department</option>';
+
+        plantSelectors.forEach(id => {
+            const select = document.getElementById(id);
+            if (select) {
+                const currentVal = select.value;
+                select.innerHTML = (id === 'cfg-eq-dept-select' ? '<option value="">-- Select Department --</option>' : '') + optionsHtml;
+                if (currentVal && cachedDepartments.some(d => d.department_name === currentVal)) {
+                    select.value = currentVal;
+                }
+                if (id !== 'cfg-eq-dept-select') {
+                    const eqId = id.replace('-plant', '-eq');
+                    updateEquipmentOptionsForSelect(id, eqId);
+                }
+            }
+        });
+    }
+
+    function updateEquipmentOptionsForSelect(plantSelectId, equipmentSelectId) {
         const plantSelect = document.getElementById(plantSelectId);
         const eqSelect = document.getElementById(equipmentSelectId);
         if (!plantSelect || !eqSelect) return;
 
-        const selectedPlant = plantSelect.value;
-        const items = EQUIPMENT_BY_PLANT[selectedPlant] || [];
+        const selectedDept = plantSelect.value;
+        const items = cachedEquipmentMap[selectedDept] || [];
+        
+        let html = '<option value="">-- Select Equipment --</option>';
+        html += items.map(eq => `<option value="${eq.equipment_name}">${eq.equipment_name}</option>`).join('');
+        html += '<option value="__CUSTOM__">➕ Enter Custom Equipment...</option>';
 
-        eqSelect.innerHTML = '<option value="">-- Select Equipment --</option>' +
-            items.map(eq => `<option value="${eq}">${eq}</option>`).join('');
+        eqSelect.innerHTML = html;
     }
 
     ['modal-bd-plant', 'modal-pm-plant', 'modal-wd-plant'].forEach(plantId => {
         const el = document.getElementById(plantId);
         if (el) {
             const eqId = plantId.replace('-plant', '-eq');
-            el.addEventListener('change', () => updateEquipmentOptions(plantId, eqId));
-            updateEquipmentOptions(plantId, eqId);
+            el.addEventListener('change', () => updateEquipmentOptionsForSelect(plantId, eqId));
         }
     });
+
+    ['modal-bd-eq', 'modal-pm-eq', 'modal-wd-eq'].forEach(eqId => {
+        const el = document.getElementById(eqId);
+        if (el) {
+            el.addEventListener('change', () => {
+                if (el.value === '__CUSTOM__') {
+                    const customName = prompt('Enter New Equipment / Machine Name:');
+                    if (customName && customName.trim()) {
+                        const trimmed = customName.trim();
+                        const opt = document.createElement('option');
+                        opt.value = trimmed;
+                        opt.textContent = trimmed;
+                        opt.selected = true;
+                        el.insertBefore(opt, el.lastElementChild);
+                    } else {
+                        el.value = '';
+                    }
+                }
+            });
+        }
+    });
+
+    function renderPlantSetupPanel() {
+        const deptListEl = document.getElementById('cfg-dept-list');
+        if (deptListEl) {
+            if (!cachedDepartments.length) {
+                deptListEl.innerHTML = '<small class="text-muted">No departments created yet. Add one above or click "Load Template".</small>';
+            } else {
+                deptListEl.innerHTML = cachedDepartments.map(d => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                        <strong style="color: #10b981; font-size: 0.9rem;">${d.department_name}</strong>
+                        <button class="btn btn-sm btn-del-dept" data-id="${d.id}" style="border:1px solid #ef4444; color:#ef4444; background:transparent; padding:2px 8px; font-size:0.75rem;">Delete</button>
+                    </div>
+                `).join('');
+
+                document.querySelectorAll('.btn-del-dept').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const id = e.target.getAttribute('data-id');
+                        if (confirm('Delete this department and all its associated machines?')) {
+                            await fetch(`/api/config/departments/${id}`, { method: 'DELETE' });
+                            loadDynamicDepartmentsAndEquipment();
+                        }
+                    });
+                });
+            }
+        }
+
+        renderEquipmentSetupList();
+    }
+
+    function renderEquipmentSetupList() {
+        const eqDeptSelect = document.getElementById('cfg-eq-dept-select');
+        const eqListEl = document.getElementById('cfg-eq-list');
+        if (!eqDeptSelect || !eqListEl) return;
+
+        const selectedDept = eqDeptSelect.value;
+        if (!selectedDept) {
+            eqListEl.innerHTML = '<small class="text-muted">Select a department above to view and manage equipment list.</small>';
+            return;
+        }
+
+        const items = cachedEquipmentMap[selectedDept] || [];
+        if (!items.length) {
+            eqListEl.innerHTML = `<small class="text-muted">No equipment added to "${selectedDept}" yet.</small>`;
+            return;
+        }
+
+        eqListEl.innerHTML = items.map(eq => `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                <span style="font-size: 0.85rem; color: #fff;">⚙️ ${eq.equipment_name}</span>
+                <button class="btn btn-sm btn-del-eq" data-id="${eq.id}" style="border:1px solid #ef4444; color:#ef4444; background:transparent; padding:2px 6px; font-size:0.7rem;">Delete</button>
+            </div>
+        `).join('');
+
+        document.querySelectorAll('.btn-del-eq').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const id = e.target.getAttribute('data-id');
+                await fetch(`/api/config/equipment/${id}`, { method: 'DELETE' });
+                loadDynamicDepartmentsAndEquipment();
+            });
+        });
+    }
+
+    const cfgEqDeptSelect = document.getElementById('cfg-eq-dept-select');
+    if (cfgEqDeptSelect) {
+        cfgEqDeptSelect.addEventListener('change', renderEquipmentSetupList);
+    }
+
+    const btnAddDept = document.getElementById('btn-add-dept');
+    if (btnAddDept) {
+        btnAddDept.addEventListener('click', async () => {
+            const input = document.getElementById('cfg-new-dept-name');
+            const val = input ? input.value.trim() : '';
+            if (!val) return alert('Please enter a department name.');
+            await fetch('/api/config/departments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ department_name: val })
+            });
+            input.value = '';
+            loadDynamicDepartmentsAndEquipment();
+        });
+    }
+
+    const btnAddEq = document.getElementById('btn-add-eq');
+    if (btnAddEq) {
+        btnAddEq.addEventListener('click', async () => {
+            const deptVal = document.getElementById('cfg-eq-dept-select').value;
+            const input = document.getElementById('cfg-new-eq-name');
+            const eqVal = input ? input.value.trim() : '';
+            if (!deptVal) return alert('Please select a department first.');
+            if (!eqVal) return alert('Please enter a machine / equipment name.');
+            await fetch('/api/config/equipment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ department_name: deptVal, equipment_name: eqVal })
+            });
+            input.value = '';
+            loadDynamicDepartmentsAndEquipment();
+        });
+    }
+
+    const btnSeedTemplate = document.getElementById('btn-seed-template');
+    if (btnSeedTemplate) {
+        btnSeedTemplate.addEventListener('click', async () => {
+            if (confirm('Load standard industry template departments and machinery?')) {
+                await fetch('/api/config/seed-template', { method: 'POST' });
+                loadDynamicDepartmentsAndEquipment();
+            }
+        });
+    }
+
+    loadDynamicDepartmentsAndEquipment();
 
     // ----------------------------------------------------
     // MAINTENANCE STAFF LIST (GENERIC & EXTENSIBLE)
