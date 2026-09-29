@@ -1269,6 +1269,34 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = '⬆️ Sync All Records to Google Sheets Now';
     });
 
+    // Supabase Manual Batch Sync Handler
+    const btnSupabaseSync = document.getElementById('btn-supabase-sync-all');
+    if (btnSupabaseSync) {
+        btnSupabaseSync.addEventListener('click', async () => {
+            const statusEl = document.getElementById('supabase-sync-status');
+            btnSupabaseSync.disabled = true;
+            btnSupabaseSync.textContent = '⏳ Syncing to Supabase... please wait';
+            if (statusEl) statusEl.textContent = '';
+
+            try {
+                const res = await fetch('/api/supabase/sync-all', { method: 'POST' });
+                const data = await res.json();
+                if (statusEl) {
+                    statusEl.innerHTML = `✅ <b>Supabase Batch Sync Complete!</b> Synced breakdown tickets, PM logs, welding records, plant configuration, and user accounts.`;
+                    statusEl.style.color = '#10b981';
+                }
+            } catch (e) {
+                if (statusEl) {
+                    statusEl.textContent = '❌ Connection error: ' + (e.message || e);
+                    statusEl.style.color = '#ef4444';
+                }
+            }
+
+            btnSupabaseSync.disabled = false;
+            btnSupabaseSync.textContent = '⚡ Batch Sync All Database Records to Supabase Now';
+        });
+    }
+
     // Client Handover Reset Button — EXCLUSIVE ADMINISTRATOR RIGHT!
     if (document.getElementById('btn-reset-db')) {
         document.getElementById('btn-reset-db').addEventListener('click', async () => {

@@ -116,6 +116,19 @@ else:
     res.json(data.raw ? { error: data.raw } : data);
 });
 
+// Batch sync all records to Supabase
+app.all('/api/supabase/sync-all', async (req, res) => {
+    const code = `
+import database, json
+database.init_db()
+data = database.sync_all_to_supabase()
+print(json.dumps(data))
+    `;
+    const data = await runPythonCode(code);
+    res.json(data);
+});
+
+
 // Clear all database records and Google Sheets for client handover
 app.post('/api/reset-database', async (req, res) => {
     const code = `

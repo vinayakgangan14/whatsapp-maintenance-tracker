@@ -1,11 +1,121 @@
 import sqlite3
 import datetime
+import os
+import json
+import urllib.request
+import urllib.parse
 from config import DB_PATH
 
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+# --------------------------------------------------------------------
+# REAL-TIME SUPABASE SYNC HELPERS (HTTP REST API via urllib)
+# --------------------------------------------------------------------
+
+def sync_to_supabase(table_name, record_dict):
+    """
+    Pushes/upserts a record into Supabase REST API if SUPABASE_URL & key are configured.
+    """
+    supabase_url = (os.getenv("SUPABASE_URL") or get_setting("SUPABASE_URL", "")).rstrip("/")
+    supabase_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("SUPABASE_KEY") or
+        get_setting("SUPABASE_ANON_KEY", "")
+    )
+    
+    if not supabase_url or not supabase_key:
+        return False, "Supabase environment variables not configured"
+
+    try:
+        endpoint = f"{supabase_url}/rest/v1/{table_name}"
+        payload = dict(record_dict)
+        
+        # Strip local SQLite internal flags if needed
+        payload.pop("synced_to_sheets", None)
+        
+        # Ensure company_id is present
+        if "company_id" not in payload:
+            payload["company_id"] = "default"
+            
+        data_bytes = json.dumps(payload).encode("utf-8")
+        
+        req = urllib.request.Request(endpoint, data=data_bytes, method="POST")
+        req.add_header("apikey", supabase_key)
+        req.add_header("Authorization", f"Bearer {supabase_key}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "resolution=merge-duplicates,return=representation")
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_body = response.read().decode("utf-8")
+            return True, res_body
+    except Exception as e:
+        print(f"[Supabase Sync Error] Table '{table_name}': {e}")
+        return False, str(e)
+
+
+def delete_from_supabase(table_name, query_params):
+    """
+    Deletes record(s) from Supabase REST API matching query_params dict.
+    """
+    supabase_url = (os.getenv("SUPABASE_URL") or get_setting("SUPABASE_URL", "")).rstrip("/")
+    supabase_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("SUPABASE_KEY") or
+        get_setting("SUPABASE_ANON_KEY", "")
+    )
+    
+    if not supabase_url or not supabase_key:
+        return False, "Supabase environment variables not configured"
+
+    try:
+        qs = urllib.parse.urlencode(query_params)
+        endpoint = f"{supabase_url}/rest/v1/{table_name}?{qs}"
+        req = urllib.request.Request(endpoint, method="DELETE")
+        req.add_header("apikey", supabase_key)
+        req.add_header("Authorization", f"Bearer {supabase_key}")
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_body = response.read().decode("utf-8")
+            return True, res_body
+    except Exception as e:
+        print(f"[Supabase Delete Error] Table '{table_name}': {e}")
+        return False, str(e)
+
+
+def sync_all_to_supabase():
+    """
+    Batch pushes all local SQLite records to Supabase REST API.
+    """
+    results = {}
+    tables = ["breakdowns", "maintenance_logs", "welding_logs", "custom_departments", "custom_equipment", "users"]
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    for tbl in tables:
+        try:
+            cursor.execute(f"SELECT * FROM {tbl}")
+            rows = [dict(row) for row in cursor.fetchall()]
+            synced_count = 0
+            for r in rows:
+                ok, _ = sync_to_supabase(tbl, r)
+                if ok:
+                    synced_count += 1
+            results[tbl] = synced_count
+        except Exception as e:
+            results[tbl] = f"Error: {e}"
+            
+    conn.close()
+    return results
+
+
+# --------------------------------------------------------------------
+# DATABASE INITIALIZATION
+# --------------------------------------------------------------------
 
 def init_db():
     conn = get_db_connection()
@@ -15,6 +125,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS breakdowns (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
             ticket_number TEXT UNIQUE NOT NULL,
             department TEXT NOT NULL DEFAULT 'General',
             sender_phone TEXT,
@@ -36,11 +147,16 @@ def init_db():
         cursor.execute("ALTER TABLE breakdowns ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("ALTER TABLE breakdowns ADD COLUMN company_id TEXT DEFAULT 'default'")
+    except sqlite3.OperationalError:
+        pass
 
     # Preventive Maintenance table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS maintenance_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
             ticket_number TEXT UNIQUE NOT NULL,
             department TEXT NOT NULL DEFAULT 'General',
             sender_phone TEXT,
@@ -67,11 +183,16 @@ def init_db():
         cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
     except sqlite3.OperationalError:
         pass
+    try:
+        cursor.execute("ALTER TABLE maintenance_logs ADD COLUMN company_id TEXT DEFAULT 'default'")
+    except sqlite3.OperationalError:
+        pass
 
     # Scheduled Welding Work table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS welding_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
             ticket_number TEXT UNIQUE NOT NULL,
             department TEXT NOT NULL DEFAULT 'General',
             sender_phone TEXT,
@@ -89,6 +210,10 @@ def init_db():
     ''')
     try:
         cursor.execute("ALTER TABLE welding_logs ADD COLUMN assigned_to TEXT DEFAULT 'Unassigned'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE welding_logs ADD COLUMN company_id TEXT DEFAULT 'default'")
     except sqlite3.OperationalError:
         pass
 
@@ -159,7 +284,7 @@ def generate_ticket_number(prefix="BD"):
     conn.close()
     return f"{prefix}-{now_year}-{cnt:03d}"
 
-def log_breakdown(department, equipment_id, issue_description, sender_phone="", sender_name="", assigned_to="Unassigned"):
+def log_breakdown(department, equipment_id, issue_description, sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -168,91 +293,120 @@ def log_breakdown(department, equipment_id, issue_description, sender_phone="", 
     
     cursor.execute('''
         INSERT INTO breakdowns 
-        (ticket_number, department, sender_phone, sender_name, equipment_id, issue_description, start_time, status, assigned_to, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, issue_description, now_str, assigned_to or 'Unassigned', now_str))
+        (company_id, ticket_number, department, sender_phone, sender_name, equipment_id, issue_description, start_time, status, assigned_to, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?)
+    ''', (company_id, ticket, department, sender_phone, sender_name, equipment_id, issue_description, now_str, assigned_to or 'Unassigned', now_str))
     
     conn.commit()
     breakdown_id = cursor.lastrowid
+    
+    cursor.execute("SELECT * FROM breakdowns WHERE id = ?", (breakdown_id,))
+    row_dict = dict(cursor.fetchone())
     conn.close()
+    
+    sync_to_supabase("breakdowns", row_dict)
     return ticket, breakdown_id
 
 def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes="", technician="", department="General"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Check in breakdowns table
-    if ticket_number:
-        cursor.execute("SELECT * FROM breakdowns WHERE ticket_number = ? AND status != 'RESOLVED'", (ticket_number,))
-    elif equipment_id:
-        cursor.execute("SELECT * FROM breakdowns WHERE equipment_id LIKE ? AND status != 'RESOLVED' ORDER BY id DESC LIMIT 1", (f"%{equipment_id}%",))
-    else:
-        conn.close()
-        return None, "No equipment or ticket provided."
-        
-    record = cursor.fetchone()
+    record = None
+    target_table = "breakdowns"
     
-    # 2. Check in maintenance_logs table if ticket_number starts with PM-
-    if not record and ticket_number and ticket_number.startswith("PM-"):
-        cursor.execute("SELECT * FROM maintenance_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (ticket_number,))
+    # 1. Search by exact ticket_number first across all tables if provided
+    if ticket_number and str(ticket_number).strip():
+        tn = str(ticket_number).strip()
+        # Search breakdowns
+        cursor.execute("SELECT * FROM breakdowns WHERE ticket_number = ? AND status != 'RESOLVED'", (tn,))
         record = cursor.fetchone()
         if record:
-            cursor.execute('''
-                UPDATE maintenance_logs 
-                SET status = 'RESOLVED',
-                    technician = ?
-                WHERE id = ?
-            ''', (technician or record['technician'], record['id']))
-            conn.commit()
-            cursor.execute("SELECT * FROM maintenance_logs WHERE id = ?", (record['id'],))
-            updated = cursor.fetchone()
-            conn.close()
-            return dict(updated), None
-
-    # 3. Check in welding_logs table if ticket_number starts with WD-
-    if not record and ticket_number and ticket_number.startswith("WD-"):
-        cursor.execute("SELECT * FROM welding_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (ticket_number,))
+            target_table = "breakdowns"
+        else:
+            # Search maintenance_logs
+            cursor.execute("SELECT * FROM maintenance_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (tn,))
+            record = cursor.fetchone()
+            if record:
+                target_table = "maintenance_logs"
+            else:
+                # Search welding_logs
+                cursor.execute("SELECT * FROM welding_logs WHERE ticket_number = ? AND status != 'RESOLVED'", (tn,))
+                record = cursor.fetchone()
+                if record:
+                    target_table = "welding_logs"
+                    
+    # 2. Fallback to searching by equipment_id in breakdowns if no record found yet by ticket_number
+    if not record and equipment_id and str(equipment_id).strip():
+        eq = str(equipment_id).strip()
+        cursor.execute("SELECT * FROM breakdowns WHERE equipment_id LIKE ? AND status != 'RESOLVED' ORDER BY id DESC LIMIT 1", (f"%{eq}%",))
         record = cursor.fetchone()
         if record:
-            cursor.execute('''
-                UPDATE welding_logs 
-                SET status = 'RESOLVED',
-                    technician = ?
-                WHERE id = ?
-            ''', (technician or record['sender_name'], record['id']))
-            conn.commit()
-            cursor.execute("SELECT * FROM welding_logs WHERE id = ?", (record['id'],))
-            updated = cursor.fetchone()
-            conn.close()
-            return dict(updated), None
+            target_table = "breakdowns"
 
     if not record:
         conn.close()
-        return None, "No active open order found for this equipment/ticket."
-        
-    start_dt = datetime.datetime.fromisoformat(record['start_time'])
-    end_dt = datetime.datetime.now()
-    duration_mins = max(1, int((end_dt - start_dt).total_seconds() / 60))
-    
-    cursor.execute('''
-        UPDATE breakdowns 
-        SET status = 'RESOLVED',
-            end_time = ?,
-            duration_minutes = ?,
-            resolution_notes = ?,
-            technician = ?,
-            synced_to_sheets = 0
-        WHERE id = ?
-    ''', (end_dt.isoformat(), duration_mins, resolution_notes, technician or record['sender_name'], record['id']))
-    
-    conn.commit()
-    
-    cursor.execute("SELECT * FROM breakdowns WHERE id = ?", (record['id'],))
-    updated = cursor.fetchone()
-    conn.close()
-    return dict(updated), None
+        return None, f"No active open ticket found for ticket '{ticket_number or equipment_id}'."
 
-def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned"):
+    end_dt = datetime.datetime.now()
+    end_iso = end_dt.isoformat()
+    rec_dict = dict(record)
+
+    if target_table == "breakdowns":
+        try:
+            start_str = str(rec_dict.get('start_time', '')).strip().replace(' ', 'T')
+            if len(start_str) > 19 and '.' not in start_str and '+' not in start_str and 'Z' not in start_str:
+                start_str = start_str[:19]
+            start_dt = datetime.datetime.fromisoformat(start_str)
+            duration_mins = max(1, int((end_dt - start_dt).total_seconds() / 60))
+        except Exception:
+            duration_mins = 1
+
+        cursor.execute('''
+            UPDATE breakdowns 
+            SET status = 'RESOLVED',
+                end_time = ?,
+                duration_minutes = ?,
+                resolution_notes = ?,
+                technician = ?,
+                synced_to_sheets = 0
+            WHERE id = ?
+        ''', (end_iso, duration_mins, resolution_notes, technician or rec_dict.get('sender_name') or 'Technician', rec_dict['id']))
+        conn.commit()
+        cursor.execute("SELECT * FROM breakdowns WHERE id = ?", (rec_dict['id'],))
+        updated = dict(cursor.fetchone())
+        conn.close()
+        sync_to_supabase("breakdowns", updated)
+        return updated, None
+
+    elif target_table == "maintenance_logs":
+        cursor.execute('''
+            UPDATE maintenance_logs 
+            SET status = 'RESOLVED',
+                technician = ?
+            WHERE id = ?
+        ''', (technician or rec_dict.get('technician') or 'Technician', rec_dict['id']))
+        conn.commit()
+        cursor.execute("SELECT * FROM maintenance_logs WHERE id = ?", (rec_dict['id'],))
+        updated = dict(cursor.fetchone())
+        conn.close()
+        sync_to_supabase("maintenance_logs", updated)
+        return updated, None
+
+    elif target_table == "welding_logs":
+        cursor.execute('''
+            UPDATE welding_logs 
+            SET status = 'RESOLVED',
+                technician = ?
+            WHERE id = ?
+        ''', (technician or rec_dict.get('sender_name') or 'Welder', rec_dict['id']))
+        conn.commit()
+        cursor.execute("SELECT * FROM welding_logs WHERE id = ?", (rec_dict['id'],))
+        updated = dict(cursor.fetchone())
+        conn.close()
+        sync_to_supabase("welding_logs", updated)
+        return updated, None
+
+def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -261,15 +415,20 @@ def log_maintenance(department, equipment_id, activity_description, scheduled_ti
     
     cursor.execute('''
         INSERT INTO maintenance_logs
-        (ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, status, assigned_to, technician, performed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
+        (company_id, ticket_number, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, status, assigned_to, technician, performed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
+    ''', (company_id, ticket, department, sender_phone, sender_name, equipment_id, activity_description, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
     
     conn.commit()
+    pm_id = cursor.lastrowid
+    cursor.execute("SELECT * FROM maintenance_logs WHERE id = ?", (pm_id,))
+    row_dict = dict(cursor.fetchone())
     conn.close()
+    
+    sync_to_supabase("maintenance_logs", row_dict)
     return ticket
 
-def log_welding(department, equipment_id, location, welding_details, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned"):
+def log_welding(department, equipment_id, location, welding_details, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -278,57 +437,86 @@ def log_welding(department, equipment_id, location, welding_details, scheduled_t
     
     cursor.execute('''
         INSERT INTO welding_logs
-        (ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, assigned_to, technician, created_at)
+        (company_id, ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, assigned_to, technician, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
-    ''', (ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
+    ''', (company_id, ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
     
     conn.commit()
+    wd_id = cursor.lastrowid
+    cursor.execute("SELECT * FROM welding_logs WHERE id = ?", (wd_id,))
+    row_dict = dict(cursor.fetchone())
     conn.close()
+    
+    sync_to_supabase("welding_logs", row_dict)
     return ticket
 
 def assign_ticket(ticket_number, assigned_to_name):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    table = None
     if ticket_number.startswith("BD-"):
         cursor.execute("UPDATE breakdowns SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+        table = "breakdowns"
     elif ticket_number.startswith("PM-"):
         cursor.execute("UPDATE maintenance_logs SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+        table = "maintenance_logs"
     elif ticket_number.startswith("WD-"):
         cursor.execute("UPDATE welding_logs SET assigned_to = ? WHERE ticket_number = ?", (assigned_to_name, ticket_number))
+        table = "welding_logs"
         
     conn.commit()
+    if table:
+        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
+        row = cursor.fetchone()
+        if row:
+            sync_to_supabase(table, dict(row))
     conn.close()
     return True, f"Ticket {ticket_number} assigned to {assigned_to_name}."
 
 def approve_ticket(ticket_number, manager_name="Maintenance Manager"):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    table = None
     if ticket_number.startswith("BD-"):
         cursor.execute("UPDATE breakdowns SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+        table = "breakdowns"
     elif ticket_number.startswith("PM-"):
         cursor.execute("UPDATE maintenance_logs SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+        table = "maintenance_logs"
     elif ticket_number.startswith("WD-"):
         cursor.execute("UPDATE welding_logs SET status = 'APPROVED' WHERE ticket_number = ?", (ticket_number,))
+        table = "welding_logs"
         
     conn.commit()
+    if table:
+        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
+        row = cursor.fetchone()
+        if row:
+            sync_to_supabase(table, dict(row))
     conn.close()
     return True, "Ticket approved successfully."
 
 def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+    table = None
     note = f"Rejected by {manager_name}" + (f": {reason}" if reason else "")
     if ticket_number.startswith("BD-"):
         cursor.execute("UPDATE breakdowns SET status = 'REJECTED', resolution_notes = ? WHERE ticket_number = ?", (note, ticket_number))
+        table = "breakdowns"
     elif ticket_number.startswith("PM-"):
         cursor.execute("UPDATE maintenance_logs SET status = 'REJECTED', activity_description = activity_description || ? WHERE ticket_number = ?", (f" [{note}]", ticket_number))
+        table = "maintenance_logs"
     elif ticket_number.startswith("WD-"):
         cursor.execute("UPDATE welding_logs SET status = 'REJECTED', welding_details = welding_details || ? WHERE ticket_number = ?", (f" [{note}]", ticket_number))
+        table = "welding_logs"
         
     conn.commit()
+    if table:
+        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
+        row = cursor.fetchone()
+        if row:
+            sync_to_supabase(table, dict(row))
     conn.close()
     return True, "Ticket rejected."
 
@@ -400,10 +588,10 @@ def get_statistics():
     cursor.execute("SELECT COUNT(*) as open_wd FROM welding_logs WHERE status != 'RESOLVED' AND status != 'REJECTED'")
     open_wd = cursor.fetchone()['open_wd']
     
-    # 1. MTTR (Mean Time To Repair in Minutes): Total Downtime / Resolved Breakdowns
+    # MTTR (Mean Time To Repair in Minutes): Total Downtime / Resolved Breakdowns
     mttr_minutes = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0.0
 
-    # 2. MTBF (Mean Time Between Failures): Total Operating Time / Total Failures
+    # MTBF (Mean Time Between Failures): Total Operating Time / Total Failures
     if total_bd == 0:
         mtbf_minutes = 0.0
         mtbf_hours = 0.0
@@ -500,8 +688,10 @@ def add_custom_department(department_name, company_id='default'):
         conn.commit()
         cursor.execute("SELECT id FROM custom_departments WHERE company_id = ? AND department_name = ?", (company_id, dept_name))
         row = cursor.fetchone()
+        dept_id = row['id'] if row else True
         conn.close()
-        return row['id'] if row else True
+        sync_to_supabase("custom_departments", {"company_id": company_id, "department_name": dept_name, "created_at": now_str})
+        return dept_id
     except Exception as e:
         conn.close()
         return False
@@ -516,6 +706,7 @@ def delete_custom_department(dept_id, company_id='default'):
         cursor.execute("DELETE FROM custom_equipment WHERE department_name = ? AND company_id = ?", (dept_name, company_id))
         cursor.execute("DELETE FROM custom_departments WHERE id = ? AND company_id = ?", (dept_id, company_id))
         conn.commit()
+        delete_from_supabase("custom_departments", {"department_name": f"eq.{dept_name}", "company_id": f"eq.{company_id}"})
     conn.close()
     return True
 
@@ -544,8 +735,10 @@ def add_custom_equipment(department_name, equipment_name, company_id='default'):
         conn.commit()
         cursor.execute("SELECT id FROM custom_equipment WHERE company_id = ? AND department_name = ? AND equipment_name = ?", (company_id, dept_name, eq_name))
         row = cursor.fetchone()
+        eq_id = row['id'] if row else True
         conn.close()
-        return row['id'] if row else True
+        sync_to_supabase("custom_equipment", {"company_id": company_id, "department_name": dept_name, "equipment_name": eq_name, "created_at": now_str})
+        return eq_id
     except Exception as e:
         conn.close()
         return False
@@ -553,8 +746,14 @@ def add_custom_equipment(department_name, equipment_name, company_id='default'):
 def delete_custom_equipment(equipment_id, company_id='default'):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM custom_equipment WHERE id = ? AND company_id = ?", (equipment_id, company_id))
-    conn.commit()
+    cursor.execute("SELECT department_name, equipment_name FROM custom_equipment WHERE id = ? AND company_id = ?", (equipment_id, company_id))
+    row = cursor.fetchone()
+    if row:
+        dept_name = row['department_name']
+        eq_name = row['equipment_name']
+        cursor.execute("DELETE FROM custom_equipment WHERE id = ? AND company_id = ?", (equipment_id, company_id))
+        conn.commit()
+        delete_from_supabase("custom_equipment", {"department_name": f"eq.{dept_name}", "equipment_name": f"eq.{eq_name}", "company_id": f"eq.{company_id}"})
     conn.close()
     return True
 
@@ -649,7 +848,9 @@ def add_user(email_or_name, password, role, company_id='default'):
         row = cursor.fetchone()
         user_id = row['id'] if row else 1
         conn.close()
-        return {"id": user_id, "email_or_name": email_clean, "role": role}, None
+        user_dict = {"id": user_id, "company_id": company_id, "email_or_name": email_clean, "password": pwd_clean, "role": role, "created_at": now_str}
+        sync_to_supabase("users", user_dict)
+        return user_dict, None
     except Exception as e:
         conn.close()
         return False, str(e)
@@ -657,8 +858,13 @@ def add_user(email_or_name, password, role, company_id='default'):
 def delete_user(user_id, company_id='default'):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = ? AND company_id = ?", (user_id, company_id))
-    conn.commit()
+    cursor.execute("SELECT email_or_name FROM users WHERE id = ? AND company_id = ?", (user_id, company_id))
+    row = cursor.fetchone()
+    if row:
+        email = row['email_or_name']
+        cursor.execute("DELETE FROM users WHERE id = ? AND company_id = ?", (user_id, company_id))
+        conn.commit()
+        delete_from_supabase("users", {"email_or_name": f"eq.{email}", "company_id": f"eq.{company_id}"})
     conn.close()
     return True
 

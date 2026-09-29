@@ -343,6 +343,17 @@
                     <button class="btn btn-emerald" id="btn-sync-all" style="margin-left:0.75rem;">⬆️ Sync All Records to Google Sheets Now</button>
                     <p id="sync-all-status" class="text-muted" style="margin-top:0.5rem;font-size:0.85rem;"></p>
                 </div>
+
+                <!-- SUPABASE REAL-TIME DATABASE SYNC CARD -->
+                <div class="glass-card" style="margin-top: 1.5rem; border-left: 4px solid #3b82f6;">
+                    <h3>⚡ Supabase Cloud Database Real-Time Sync</h3>
+                    <p class="text-muted">All breakdown events, PM logs, welding records, plant configurations, and user credentials stream instantly to your connected Supabase project.</p>
+                    <div style="background: rgba(0,0,0,0.3); padding: 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem;">
+                        <p id="supabase-status-text" style="margin:0; font-size: 0.9rem; color: #10b981;">⚡ <b>Supabase Cloud Connection:</b> Real-time streaming active (tied to <code>SUPABASE_URL</code> & <code>SUPABASE_ANON_KEY</code> env vars on Render).</p>
+                    </div>
+                    <button class="btn" id="btn-supabase-sync-all" style="background: #3b82f6; color: #fff;">⚡ Batch Sync All Database Records to Supabase Now</button>
+                    <p id="supabase-sync-status" class="text-muted" style="margin-top:0.5rem;font-size:0.85rem;"></p>
+                </div>
             </section>
 
             <!-- TAB 6: PLANT & EQUIPMENT SETUP -->
