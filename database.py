@@ -36,7 +36,19 @@ def sync_to_supabase(table_name, record_dict):
         return False, "Supabase environment variables not configured"
 
     try:
-        endpoint = f"{supabase_url}/rest/v1/{table_name}"
+        on_conflict_keys = {
+            "breakdowns": "company_id,ticket_number",
+            "maintenance_logs": "company_id,ticket_number",
+            "welding_logs": "company_id,ticket_number",
+            "custom_departments": "company_id,department_name",
+            "custom_equipment": "company_id,department_name,equipment_name",
+            "users": "company_id,email_or_name",
+            "companies": "company_name"
+        }
+        
+        conflict_param = on_conflict_keys.get(table_name)
+        qs = f"?on_conflict={conflict_param}" if conflict_param else ""
+        endpoint = f"{supabase_url}/rest/v1/{table_name}{qs}"
         payload = dict(record_dict)
         
         # Strip local SQLite internal flags and autoincrement id
@@ -97,6 +109,94 @@ def delete_from_supabase(table_name, query_params):
     except Exception as e:
         print(f"[Supabase Delete Error] Table '{table_name}': {e}")
         return False, str(e)
+
+
+def fetch_from_supabase(table_name, select="*", order="id.desc", limit=100, company_id=None):
+    """
+    Fetches records directly from Supabase REST API as primary source of truth.
+    """
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or
+        get_setting("SUPABASE_URL", "") or
+        DEFAULT_CONFIG.get("SUPABASE_URL", "")
+    ).rstrip("/")
+    supabase_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("SUPABASE_KEY") or
+        get_setting("SUPABASE_ANON_KEY", "") or
+        DEFAULT_CONFIG.get("SUPABASE_ANON_KEY", "")
+    )
+    
+    if not supabase_url or not supabase_key:
+        return None
+
+    try:
+        params = [f"select={select}"]
+        if order:
+            params.append(f"order={order}")
+        if limit:
+            params.append(f"limit={limit}")
+        if company_id:
+            cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+            params.append(f"company_id=eq.{cid}")
+            
+        qs = "&".join(params)
+        endpoint = f"{supabase_url}/rest/v1/{table_name}?{qs}"
+        req = urllib.request.Request(endpoint, method="GET")
+        req.add_header("apikey", supabase_key)
+        req.add_header("Authorization", f"Bearer {supabase_key}")
+        
+        with urllib.request.urlopen(req, timeout=5) as response:
+            res_body = response.read().decode("utf-8")
+            data = json.loads(res_body)
+            if isinstance(data, list):
+                return data
+            return None
+    except Exception as e:
+        print(f"[Supabase Fetch Error] Table '{table_name}': {e}")
+        return None
+
+
+import uuid
+
+def get_or_create_company(company_name):
+    if not company_name or not company_name.strip():
+        company_name = "Default Workspace"
+    clean_name = company_name.strip()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS companies (
+            id TEXT PRIMARY KEY,
+            company_name TEXT UNIQUE NOT NULL,
+            industry TEXT DEFAULT 'Manufacturing',
+            created_at TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    
+    cursor.execute("SELECT id, company_name FROM companies WHERE LOWER(company_name) = LOWER(?)", (clean_name,))
+    row = cursor.fetchone()
+    if row:
+        conn.close()
+        return {"id": row["id"], "company_name": row["company_name"]}
+        
+    comp_id = str(uuid.uuid4())
+    now_str = datetime.datetime.now().isoformat()
+    
+    try:
+        cursor.execute("INSERT INTO companies (id, company_name, industry, created_at) VALUES (?, ?, 'Manufacturing', ?)",
+                       (comp_id, clean_name, now_str))
+        conn.commit()
+        conn.close()
+        comp_dict = {"id": comp_id, "company_name": clean_name, "industry": "Manufacturing", "created_at": now_str}
+        sync_to_supabase("companies", comp_dict)
+        return comp_dict
+    except Exception as e:
+        conn.close()
+        return {"id": "00000000-0000-0000-0000-000000000000", "company_name": clean_name}
 
 
 def sync_all_to_supabase():
@@ -548,7 +648,10 @@ def get_open_welding():
     conn.close()
     return rows
 
-def get_all_breakdowns(limit=100):
+def get_all_breakdowns(limit=100, company_id=None):
+    sp_data = fetch_from_supabase("breakdowns", limit=limit, company_id=company_id)
+    if sp_data is not None and len(sp_data) > 0:
+        return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM breakdowns ORDER BY id DESC LIMIT ?", (limit,))
@@ -556,7 +659,10 @@ def get_all_breakdowns(limit=100):
     conn.close()
     return rows
 
-def get_all_maintenance(limit=100):
+def get_all_maintenance(limit=100, company_id=None):
+    sp_data = fetch_from_supabase("maintenance_logs", limit=limit, company_id=company_id)
+    if sp_data is not None and len(sp_data) > 0:
+        return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM maintenance_logs ORDER BY id DESC LIMIT ?", (limit,))
@@ -564,7 +670,10 @@ def get_all_maintenance(limit=100):
     conn.close()
     return rows
 
-def get_all_welding(limit=100):
+def get_all_welding(limit=100, company_id=None):
+    sp_data = fetch_from_supabase("welding_logs", limit=limit, company_id=company_id)
+    if sp_data is not None and len(sp_data) > 0:
+        return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM welding_logs ORDER BY id DESC LIMIT ?", (limit,))
@@ -572,68 +681,38 @@ def get_all_welding(limit=100):
     conn.close()
     return rows
 
-def get_statistics():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT COUNT(*) as total_bd FROM breakdowns")
-    total_bd = cursor.fetchone()['total_bd']
-    
-    cursor.execute("SELECT COUNT(*) as open_bd FROM breakdowns WHERE status != 'RESOLVED' AND status != 'REJECTED'")
-    open_bd = cursor.fetchone()['open_bd']
+def get_statistics(company_id=None):
+    bds = get_all_breakdowns(limit=500, company_id=company_id)
+    pms = get_all_maintenance(limit=500, company_id=company_id)
+    wds = get_all_welding(limit=500, company_id=company_id)
 
-    cursor.execute("SELECT COUNT(*) as pending_bd FROM breakdowns WHERE status = 'PENDING_APPROVAL'")
-    pending_bd = cursor.fetchone()['pending_bd']
+    total_bd = len(bds)
+    open_bd = len([b for b in bds if b.get('status') not in ('RESOLVED', 'REJECTED')])
+    pending_bd = len([b for b in bds if b.get('status') == 'PENDING_APPROVAL'])
+    resolved_bd = len([b for b in bds if b.get('status') == 'RESOLVED'])
     
-    cursor.execute("SELECT COUNT(*) as resolved_bd FROM breakdowns WHERE status = 'RESOLVED'")
-    resolved_bd = cursor.fetchone()['resolved_bd']
+    sum_downtime = sum([int(b.get('duration_minutes') or 0) for b in bds if b.get('status') == 'RESOLVED'])
     
-    cursor.execute("SELECT SUM(duration_minutes) as total_downtime FROM breakdowns WHERE status = 'RESOLVED'")
-    sum_downtime = cursor.fetchone()['total_downtime'] or 0
-
-    cursor.execute("SELECT COUNT(*) as total_pm FROM maintenance_logs")
-    total_pm = cursor.fetchone()['total_pm']
+    total_pm = len(pms)
+    total_wd = len(wds)
+    open_wd = len([w for w in wds if w.get('status') not in ('RESOLVED', 'REJECTED')])
     
-    cursor.execute("SELECT COUNT(*) as total_wd FROM welding_logs")
-    total_wd = cursor.fetchone()['total_wd']
-    
-    cursor.execute("SELECT COUNT(*) as open_wd FROM welding_logs WHERE status != 'RESOLVED' AND status != 'REJECTED'")
-    open_wd = cursor.fetchone()['open_wd']
-    
-    # MTTR (Mean Time To Repair in Minutes): Total Downtime / Resolved Breakdowns
     mttr_minutes = round(sum_downtime / max(1, resolved_bd), 1) if resolved_bd > 0 else 0.0
 
-    # MTBF (Mean Time Between Failures): Total Operating Time / Total Failures
     if total_bd == 0:
         mtbf_minutes = 0.0
         mtbf_hours = 0.0
     else:
-        cursor.execute("SELECT MIN(created_at), MIN(start_time) FROM breakdowns")
-        row = cursor.fetchone()
-        earliest_str = row[0] or row[1] if row else None
-        
-        now = datetime.datetime.now()
-        if earliest_str:
-            try:
-                clean_str = str(earliest_str).strip().replace(' ', 'T')
-                if len(clean_str) > 19 and '.' not in clean_str and '+' not in clean_str and 'Z' not in clean_str:
-                    clean_str = clean_str[:19]
-                earliest_dt = datetime.datetime.fromisoformat(clean_str)
-                elapsed_mins = (now - earliest_dt).total_seconds() / 60.0
-                tracking_window_mins = max(30 * 24 * 60.0, elapsed_mins)
-                operating_mins = max(1.0, tracking_window_mins - sum_downtime)
-            except Exception:
-                operating_mins = float(30 * 24 * 60 - sum_downtime)
-        else:
-            operating_mins = float(30 * 24 * 60)
-
+        tracking_window_mins = 30 * 24 * 60.0
+        operating_mins = max(1.0, tracking_window_mins - sum_downtime)
         mtbf_minutes = round(operating_mins / total_bd, 1)
         mtbf_hours = round(mtbf_minutes / 60.0, 1)
-    
-    cursor.execute("SELECT department, COUNT(*) as count FROM breakdowns GROUP BY department")
-    dept_counts = {row['department']: row['count'] for row in cursor.fetchall()}
-    
-    conn.close()
+
+    dept_counts = {}
+    for b in bds:
+        dept = b.get('department') or 'General'
+        dept_counts[dept] = dept_counts.get(dept, 0) + 1
+
     return {
         "total_breakdowns": total_bd,
         "open_breakdowns": open_bd,

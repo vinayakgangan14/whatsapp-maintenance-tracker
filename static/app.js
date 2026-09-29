@@ -387,8 +387,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentUserRole = role;
             currentUsername = username;
+
+            const companyInput = document.getElementById('login-company-name');
+            const companyName = (companyInput && companyInput.value.trim()) ? companyInput.value.trim() : 'Purechem Industries';
+
+            try {
+                const compRes = await fetch('/api/companies/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ company_name: companyName })
+                });
+                const compData = await compRes.json();
+                if (compData && compData.id) {
+                    sessionStorage.setItem('app_company_id', compData.id);
+                }
+            } catch (err) {
+                console.warn('Company registration check skipped:', err);
+            }
+
             sessionStorage.setItem('app_role', role);
             sessionStorage.setItem('app_username', username);
+            sessionStorage.setItem('app_company_name', companyName);
 
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
@@ -501,6 +520,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (userDisplay) {
             userDisplay.innerText = `${currentUsername} (${currentUserRole})`;
+        }
+        const companyName = sessionStorage.getItem('app_company_name');
+        const pageTitleEl = document.getElementById('page-title');
+        if (pageTitleEl && companyName) {
+            pageTitleEl.innerText = `${companyName} Maintenance Tracking Portal`;
         }
     }
 
@@ -686,6 +710,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/stats');
             const data = await res.json();
 
+            if (document.getElementById('kpi-total-bd')) {
+                document.getElementById('kpi-total-bd').innerText = data.total_breakdowns || 0;
+            }
             document.getElementById('kpi-open-bd').innerText = data.open_breakdowns;
             document.getElementById('kpi-resolved-bd').innerText = data.resolved_breakdowns;
             document.getElementById('kpi-downtime').innerHTML = `${data.total_downtime_hours} <small style="font-size: 1rem">hrs</small>`;

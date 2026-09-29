@@ -26,6 +26,12 @@
             <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1.5rem;">Select your role to access Maintenance Management Suite</p>
 
             <div class="form-group" style="text-align: left;">
+                <label>Company / Plant Name</label>
+                <input type="text" id="login-company-name" placeholder="e.g. Purechem Industries" value="Purechem Industries" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); font-weight: 600;">
+                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 4px;">Each company gets a unique, isolated workspace</small>
+            </div>
+
+            <div class="form-group" style="text-align: left;">
                 <label>User Role</label>
                 <select id="login-role" class="form-control" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
                     <option value="Admin" selected>System Administrator (First Time Setup)</option>
@@ -148,6 +154,15 @@
             <section id="tab-overview" class="tab-pane active">
                 <!-- KPI Grid -->
                 <div class="kpi-grid">
+                    <div class="kpi-card" style="border-left: 4px solid #3b82f6;">
+                        <div class="kpi-header">
+                            <span class="kpi-title">Total Logged Breakdowns</span>
+                            <span class="kpi-icon">📋</span>
+                        </div>
+                        <div class="kpi-value" id="kpi-total-bd" style="color: #38bdf8;">0</div>
+                        <div class="kpi-footer" style="color: #93c5fd;">Total Registered Issues</div>
+                    </div>
+
                     <div class="kpi-card open-card">
                         <div class="kpi-header">
                             <span class="kpi-title">Active Open Tickets</span>

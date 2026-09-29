@@ -407,6 +407,17 @@ print(json.dumps({"success": True}))
 // USER AUTHENTICATION & ACCESS CONTROL ENDPOINTS
 // --------------------------------------------------------------------
 
+app.post('/api/companies/register', async (req, res) => {
+    const { company_name } = req.body;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+comp = database.get_or_create_company(${JSON.stringify(company_name || 'Default Workspace')})
+print(json.dumps(comp))
+    `);
+    res.json(data);
+});
+
 app.post('/api/auth/login', async (req, res) => {
     const { username, password, role } = req.body;
     const data = await runPythonCode(`
