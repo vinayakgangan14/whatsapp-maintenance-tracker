@@ -642,15 +642,14 @@ def add_user(email_or_name, password, role, company_id='default'):
     cursor = conn.cursor()
     now_str = datetime.datetime.now().isoformat()
     try:
-        cursor.execute("INSERT INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        cursor.execute("INSERT OR REPLACE INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
                        (company_id, email_clean, pwd_clean, role, now_str))
         conn.commit()
-        user_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM users WHERE company_id = ? AND email_or_name = ?", (company_id, email_clean))
+        row = cursor.fetchone()
+        user_id = row['id'] if row else 1
         conn.close()
         return {"id": user_id, "email_or_name": email_clean, "role": role}, None
-    except sqlite3.IntegrityError:
-        conn.close()
-        return False, "User email/username already exists"
     except Exception as e:
         conn.close()
         return False, str(e)

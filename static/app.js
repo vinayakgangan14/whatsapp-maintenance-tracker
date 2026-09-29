@@ -149,19 +149,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderPlantSetupPanel(autoSelectDept = null) {
         const deptListEl = document.getElementById('cfg-dept-list');
+        const eqDeptSelect = document.getElementById('cfg-eq-dept-select');
+
         if (deptListEl) {
             if (!cachedDepartments.length) {
                 deptListEl.innerHTML = '<small class="text-muted">No departments created yet. Add one above or click "Load Template".</small>';
             } else {
                 deptListEl.innerHTML = cachedDepartments.map(d => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                    <div class="dept-item-card" data-name="${d.department_name}" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08); cursor: pointer;">
                         <strong style="color: #10b981; font-size: 0.9rem;">${d.department_name}</strong>
-                        <button class="btn btn-sm btn-del-dept" data-id="${d.id}" style="border:1px solid #ef4444; color:#ef4444; background:transparent; padding:2px 8px; font-size:0.75rem;">Delete</button>
+                        <div style="display:flex; align-items:center; gap: 8px;">
+                            <span style="font-size: 0.75rem; color: #9ca3af;">(Click to Edit ➔)</span>
+                            <button class="btn btn-sm btn-del-dept" data-id="${d.id}" style="border:1px solid #ef4444; color:#ef4444; background:transparent; padding:2px 8px; font-size:0.75rem;">Delete</button>
+                        </div>
                     </div>
                 `).join('');
 
+                document.querySelectorAll('.dept-item-card').forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('btn-del-dept')) return;
+                        const deptName = card.getAttribute('data-name');
+                        if (eqDeptSelect) {
+                            eqDeptSelect.value = deptName;
+                            renderEquipmentSetupList();
+                        }
+                    });
+                });
+
                 document.querySelectorAll('.btn-del-dept').forEach(btn => {
                     btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
                         const id = e.target.getAttribute('data-id');
                         if (confirm('Delete this department and all its associated machines?')) {
                             await fetch(`/api/config/departments/${id}`, { method: 'DELETE' });
@@ -172,9 +189,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        if (autoSelectDept) {
-            const eqDeptSelect = document.getElementById('cfg-eq-dept-select');
-            if (eqDeptSelect) eqDeptSelect.value = autoSelectDept;
+        if (autoSelectDept && eqDeptSelect) {
+            eqDeptSelect.value = autoSelectDept;
+        } else if (eqDeptSelect && !eqDeptSelect.value && cachedDepartments.length > 0) {
+            eqDeptSelect.value = cachedDepartments[0].department_name;
         }
 
         renderEquipmentSetupList();
