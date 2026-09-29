@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let cachedDepartments = [];
     let cachedEquipmentMap = {};
 
-    async function loadDynamicDepartmentsAndEquipment() {
+    async function loadDynamicDepartmentsAndEquipment(autoSelectDept = null) {
         try {
             const deptsRes = await fetch('/api/config/departments');
             const deptsData = await deptsRes.json();
@@ -72,14 +72,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            populateAllDepartmentDropdowns();
-            renderPlantSetupPanel();
+            populateAllDepartmentDropdowns(autoSelectDept);
+            renderPlantSetupPanel(autoSelectDept);
         } catch (err) {
             console.error('Error loading dynamic plant config:', err);
         }
     }
 
-    function populateAllDepartmentDropdowns() {
+    function populateAllDepartmentDropdowns(autoSelectDept = null) {
         const plantSelectors = ['modal-bd-plant', 'modal-pm-plant', 'modal-wd-plant', 'cfg-eq-dept-select'];
         const optionsHtml = cachedDepartments.length ?
             cachedDepartments.map(d => `<option value="${d.department_name}">${d.department_name}</option>`).join('') :
@@ -88,10 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
         plantSelectors.forEach(id => {
             const select = document.getElementById(id);
             if (select) {
-                const currentVal = select.value;
+                const currentVal = (id === 'cfg-eq-dept-select' && autoSelectDept) ? autoSelectDept : select.value;
                 select.innerHTML = (id === 'cfg-eq-dept-select' ? '<option value="">-- Select Department --</option>' : '') + optionsHtml;
                 if (currentVal && cachedDepartments.some(d => d.department_name === currentVal)) {
                     select.value = currentVal;
+                } else if (id === 'cfg-eq-dept-select' && autoSelectDept) {
+                    select.value = autoSelectDept;
                 }
                 if (id !== 'cfg-eq-dept-select') {
                     const eqId = id.replace('-plant', '-eq');
@@ -145,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    function renderPlantSetupPanel() {
+    function renderPlantSetupPanel(autoSelectDept = null) {
         const deptListEl = document.getElementById('cfg-dept-list');
         if (deptListEl) {
             if (!cachedDepartments.length) {
@@ -170,6 +172,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        if (autoSelectDept) {
+            const eqDeptSelect = document.getElementById('cfg-eq-dept-select');
+            if (eqDeptSelect) eqDeptSelect.value = autoSelectDept;
+        }
+
         renderEquipmentSetupList();
     }
 
@@ -186,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const items = cachedEquipmentMap[selectedDept] || [];
         if (!items.length) {
-            eqListEl.innerHTML = `<small class="text-muted">No equipment added to "${selectedDept}" yet.</small>`;
+            eqListEl.innerHTML = `<small class="text-muted">No equipment added to "${selectedDept}" yet. Add a machine using the form above.</small>`;
             return;
         }
 
@@ -201,7 +208,8 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', async (e) => {
                 const id = e.target.getAttribute('data-id');
                 await fetch(`/api/config/equipment/${id}`, { method: 'DELETE' });
-                loadDynamicDepartmentsAndEquipment();
+                const currentDept = document.getElementById('cfg-eq-dept-select').value;
+                loadDynamicDepartmentsAndEquipment(currentDept);
             });
         });
     }
@@ -223,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ department_name: val })
             });
             input.value = '';
-            loadDynamicDepartmentsAndEquipment();
+            await loadDynamicDepartmentsAndEquipment(val);
         });
     }
 
@@ -241,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ department_name: deptVal, equipment_name: eqVal })
             });
             input.value = '';
-            loadDynamicDepartmentsAndEquipment();
+            await loadDynamicDepartmentsAndEquipment(deptVal);
         });
     }
 
@@ -1010,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Quick Log Breakdown Modal (Anti-duplicate double click protection + instant response)
     const bdModal = document.getElementById('modal-log-bd');
     document.getElementById('btn-quick-log').addEventListener('click', () => {
-        updateEquipmentOptions('modal-bd-plant', 'modal-bd-eq');
+        updateEquipmentOptionsForSelect('modal-bd-plant', 'modal-bd-eq');
         document.getElementById('modal-bd-issue').value = '';
         if (bdModal) bdModal.classList.add('active');
     });
@@ -1064,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const pmModal = document.getElementById('modal-log-pm');
     if (document.getElementById('btn-schedule-pm')) {
         document.getElementById('btn-schedule-pm').addEventListener('click', () => {
-            updateEquipmentOptions('modal-pm-plant', 'modal-pm-eq');
+            updateEquipmentOptionsForSelect('modal-pm-plant', 'modal-pm-eq');
             document.getElementById('modal-pm-desc').value = '';
             if (pmModal) pmModal.classList.add('active');
         });
@@ -1122,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const wdModal = document.getElementById('modal-log-welding');
     if (document.getElementById('btn-schedule-welding')) {
         document.getElementById('btn-schedule-welding').addEventListener('click', () => {
-            updateEquipmentOptions('modal-wd-plant', 'modal-wd-eq');
+            updateEquipmentOptionsForSelect('modal-wd-plant', 'modal-wd-eq');
             document.getElementById('modal-wd-details').value = '';
             if (wdModal) wdModal.classList.add('active');
         });
