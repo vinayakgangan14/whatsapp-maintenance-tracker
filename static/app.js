@@ -47,6 +47,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // PLANT & EQUIPMENT BY DEPARTMENT MAPPING
     // ----------------------------------------------------
+    function getCompanyId() {
+        return sessionStorage.getItem('app_company_id') || 'default';
+    }
+
     // ----------------------------------------------------
     // DYNAMIC PLANT & EQUIPMENT CONFIGURATION LOGIC
     // ----------------------------------------------------
@@ -55,11 +59,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadDynamicDepartmentsAndEquipment(autoSelectDept = null) {
         try {
-            const deptsRes = await fetch('/api/config/departments');
+            const cid = encodeURIComponent(getCompanyId());
+            const deptsRes = await fetch(`/api/config/departments?company_id=${cid}`);
             const deptsData = await deptsRes.json();
             cachedDepartments = Array.isArray(deptsData) ? deptsData : [];
 
-            const eqRes = await fetch('/api/config/equipment');
+            const eqRes = await fetch(`/api/config/equipment?company_id=${cid}`);
             const eqData = await eqRes.json();
             
             cachedEquipmentMap = {};
@@ -181,7 +186,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         e.stopPropagation();
                         const id = e.target.getAttribute('data-id');
                         if (confirm('Delete this department and all its associated machines?')) {
-                            await fetch(`/api/config/departments/${id}`, { method: 'DELETE' });
+                            const cid = encodeURIComponent(getCompanyId());
+                            await fetch(`/api/config/departments/${id}?company_id=${cid}`, { method: 'DELETE' });
                             loadDynamicDepartmentsAndEquipment();
                         }
                     });
@@ -225,7 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.btn-del-eq').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 const id = e.target.getAttribute('data-id');
-                await fetch(`/api/config/equipment/${id}`, { method: 'DELETE' });
+                const cid = encodeURIComponent(getCompanyId());
+                await fetch(`/api/config/equipment/${id}?company_id=${cid}`, { method: 'DELETE' });
                 const currentDept = document.getElementById('cfg-eq-dept-select').value;
                 loadDynamicDepartmentsAndEquipment(currentDept);
             });
@@ -246,7 +253,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await fetch('/api/config/departments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ department_name: val })
+                body: JSON.stringify({ department_name: val, company_id: getCompanyId() })
             });
             input.value = '';
             await loadDynamicDepartmentsAndEquipment(val);
@@ -264,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await fetch('/api/config/equipment', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ department_name: deptVal, equipment_name: eqVal })
+                body: JSON.stringify({ department_name: deptVal, equipment_name: eqVal, company_id: getCompanyId() })
             });
             input.value = '';
             await loadDynamicDepartmentsAndEquipment(deptVal);
@@ -275,7 +282,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSeedTemplate) {
         btnSeedTemplate.addEventListener('click', async () => {
             if (confirm('Load standard industry template departments and machinery?')) {
-                await fetch('/api/config/seed-template', { method: 'POST' });
+                await fetch('/api/config/seed-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ company_id: getCompanyId() })
+                });
                 loadDynamicDepartmentsAndEquipment();
             }
         });
@@ -360,12 +371,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 passcode = document.getElementById('login-passcode').value.trim();
             }
 
+            const companyInput = document.getElementById('login-company-name');
+            const companyName = (companyInput && companyInput.value.trim()) ? companyInput.value.trim() : 'Purechem Industries';
+
+            try {
+                const compRes = await fetch('/api/companies/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ company_name: companyName })
+                });
+                const compData = await compRes.json();
+                if (compData && compData.id) {
+                    sessionStorage.setItem('app_company_id', compData.id);
+                }
+            } catch (err) {
+                console.warn('Company registration check skipped:', err);
+            }
+
             // Attempt authentication against backend users database
             try {
                 const authRes = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password: passcode, role })
+                    body: JSON.stringify({ username, password: passcode, role, company_id: getCompanyId() })
                 });
                 const authData = await authRes.json();
 
@@ -388,23 +416,6 @@ document.addEventListener('DOMContentLoaded', () => {
             currentUserRole = role;
             currentUsername = username;
 
-            const companyInput = document.getElementById('login-company-name');
-            const companyName = (companyInput && companyInput.value.trim()) ? companyInput.value.trim() : 'Purechem Industries';
-
-            try {
-                const compRes = await fetch('/api/companies/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ company_name: companyName })
-                });
-                const compData = await compRes.json();
-                if (compData && compData.id) {
-                    sessionStorage.setItem('app_company_id', compData.id);
-                }
-            } catch (err) {
-                console.warn('Company registration check skipped:', err);
-            }
-
             sessionStorage.setItem('app_role', role);
             sessionStorage.setItem('app_username', username);
             sessionStorage.setItem('app_company_name', companyName);
@@ -423,7 +434,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const listEl = document.getElementById('users-table-list');
         if (!listEl) return;
         try {
-            const res = await fetch('/api/users');
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/users?company_id=${cid}`);
             const users = await res.json();
             if (!Array.isArray(users) || !users.length) {
                 listEl.innerHTML = '<small class="text-muted">No user accounts created yet.</small>';
@@ -446,7 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.addEventListener('click', async (e) => {
                     const id = e.target.getAttribute('data-id');
                     if (confirm('Delete this user account?')) {
-                        await fetch(`/api/users/${id}`, { method: 'DELETE' });
+                        const cid = encodeURIComponent(getCompanyId());
+                        await fetch(`/api/users/${id}?company_id=${cid}`, { method: 'DELETE' });
                         loadCompanyUsersList();
                     }
                 });
@@ -469,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email_or_name: email, password: pwd, role })
+                body: JSON.stringify({ email_or_name: email, password: pwd, role, company_id: getCompanyId() })
             });
             const data = await res.json();
             if (data && data.success) {
@@ -707,7 +720,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     async function loadStats() {
         try {
-            const res = await fetch('/api/stats');
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/stats?company_id=${cid}`);
             const data = await res.json();
 
             if (document.getElementById('kpi-total-bd')) {
@@ -734,7 +748,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadBreakdowns(force = false) {
         if (!force && isUserInteractingWithTable('breakdowns-table-body')) return;
         try {
-            const res = await fetch('/api/breakdowns');
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/breakdowns?company_id=${cid}`);
             const data = await res.json();
             renderBreakdownsTable(data);
         } catch (err) {
@@ -745,7 +760,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadPM(force = false) {
         if (!force && isUserInteractingWithTable('pm-table-body')) return;
         try {
-            const res = await fetch('/api/maintenance');
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/maintenance?company_id=${cid}`);
             const data = await res.json();
             const tbody = document.getElementById('pm-table-body');
             if (!tbody) return;
@@ -779,7 +795,8 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadWelding(force = false) {
         if (!force && isUserInteractingWithTable('welding-table-body')) return;
         try {
-            const res = await fetch('/api/welding');
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/welding?company_id=${cid}`);
             const data = await res.json();
             const tbody = document.getElementById('welding-table-body');
             if (!tbody) return;
@@ -1040,7 +1057,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         ticket_number: currentResolveTicket,
                         equipment_id: currentResolveEq,
                         resolution_notes: notes,
-                        technician: tech || currentUsername || 'Technician'
+                        technician: tech || currentUsername || 'Technician',
+                        company_id: getCompanyId()
                     })
                 });
 
@@ -1099,7 +1117,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         department: plant,
                         equipment_id: eq,
                         issue_description: issue,
-                        sender_name: currentUsername || 'Portal User'
+                        sender_name: currentUsername || 'Portal User',
+                        company_id: getCompanyId()
                     })
                 });
                 if (bdModal) bdModal.classList.remove('active');
@@ -1157,7 +1176,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         equipment_id: eq,
                         activity_description: desc,
                         scheduled_time: time || 'Tomorrow 10 AM',
-                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Tech')
+                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Tech'),
+                        company_id: getCompanyId()
                     })
                 });
                 if (pmModal) pmModal.classList.remove('active');
@@ -1215,7 +1235,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         equipment_id: eq,
                         welding_details: details,
                         scheduled_time: time || 'Today 3 PM',
-                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Welder')
+                        technician: assigned !== 'Unassigned' ? assigned : (currentUsername || 'Welder'),
+                        company_id: getCompanyId()
                     })
                 });
                 if (wdModal) wdModal.classList.remove('active');

@@ -51,22 +51,26 @@ function runPythonCode(pythonCode) {
 
 // Proxy stats, breakdowns, maintenance, welding to Python Database engine
 app.get('/api/stats', async (req, res) => {
-    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_statistics()))');
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
+    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_statistics(company_id=${compId})))`);
     res.json(data.raw ? {} : data);
 });
 
 app.get('/api/breakdowns', async (req, res) => {
-    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_breakdowns()))');
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
+    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_breakdowns(company_id=${compId})))`);
     res.json(Array.isArray(data) ? data : []);
 });
 
 app.get('/api/maintenance', async (req, res) => {
-    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_maintenance()))');
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
+    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_maintenance(company_id=${compId})))`);
     res.json(Array.isArray(data) ? data : []);
 });
 
 app.get('/api/welding', async (req, res) => {
-    const data = await runPythonCode('import database, json; database.init_db(); print(json.dumps(database.get_all_welding()))');
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
+    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_welding(company_id=${compId})))`);
     res.json(Array.isArray(data) ? data : []);
 });
 
@@ -144,7 +148,7 @@ print(json.dumps({"message": "Database and Google Sheets cleared successfully", 
 
 // Instant Breakdown Log
 app.post('/api/breakdowns/log', async (req, res) => {
-    const { department, equipment_id, issue_description, sender_name } = req.body;
+    const { department, equipment_id, issue_description, sender_name, company_id } = req.body;
     const code = `
 import database, json, threading, google_sheets
 database.init_db()
@@ -152,7 +156,8 @@ ticket, bd_id = database.log_breakdown(
     department=${JSON.stringify(department || 'General')},
     equipment_id=${JSON.stringify(equipment_id)},
     issue_description=${JSON.stringify(issue_description)},
-    sender_name=${JSON.stringify(sender_name || 'Web Portal User')}
+    sender_name=${JSON.stringify(sender_name || 'Web Portal User')},
+    company_id=${JSON.stringify(company_id || 'default')}
 )
 open_bds = database.get_open_breakdowns()
 matching = [b for b in open_bds if b['ticket_number'] == ticket]
@@ -168,7 +173,7 @@ print(json.dumps({"ticket": ticket, "id": bd_id}))
 
 // Instant PM Log
 app.post('/api/pm/log', async (req, res) => {
-    const { department, equipment_id, activity_description, scheduled_time, technician } = req.body;
+    const { department, equipment_id, activity_description, scheduled_time, technician, company_id } = req.body;
     const code = `
 import database, json, threading, google_sheets
 database.init_db()
@@ -177,7 +182,8 @@ ticket = database.log_maintenance(
     equipment_id=${JSON.stringify(equipment_id)},
     activity_description=${JSON.stringify(activity_description)},
     scheduled_time=${JSON.stringify(scheduled_time || 'As Scheduled')},
-    technician=${JSON.stringify(technician || 'Maintenance Tech')}
+    technician=${JSON.stringify(technician || 'Maintenance Tech')},
+    company_id=${JSON.stringify(company_id || 'default')}
 )
 payload = {"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}}
 t = threading.Thread(target=google_sheets.sync_maintenance_to_sheet, args=(payload,))
@@ -191,7 +197,7 @@ print(json.dumps({"ticket": ticket}))
 
 // Instant Welding Log
 app.post('/api/welding/log', async (req, res) => {
-    const { department, equipment_id, welding_details, scheduled_time, technician } = req.body;
+    const { department, equipment_id, welding_details, scheduled_time, technician, company_id } = req.body;
     const code = `
 import database, json, threading, google_sheets
 database.init_db()
@@ -201,7 +207,8 @@ ticket = database.log_welding(
     location=${JSON.stringify(department || 'General')},
     welding_details=${JSON.stringify(welding_details)},
     scheduled_time=${JSON.stringify(scheduled_time || 'Today')},
-    technician=${JSON.stringify(technician || 'Welder')}
+    technician=${JSON.stringify(technician || 'Welder')},
+    company_id=${JSON.stringify(company_id || 'default')}
 )
 t = threading.Thread(target=google_sheets.sync_all_records_batch)
 t.start()
@@ -331,20 +338,22 @@ print(json.dumps({
 // --------------------------------------------------------------------
 
 app.get('/api/config/departments', async (req, res) => {
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-print(json.dumps(database.get_custom_departments()))
+print(json.dumps(database.get_custom_departments(company_id=${compId})))
     `);
     res.json(Array.isArray(data) ? data : []);
 });
 
 app.post('/api/config/departments', async (req, res) => {
-    const { department_name } = req.body;
+    const { department_name, company_id } = req.body;
+    const compId = company_id ? JSON.stringify(company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-res = database.add_custom_department(${JSON.stringify(department_name || '')})
+res = database.add_custom_department(${JSON.stringify(department_name || '')}, company_id=${compId})
 print(json.dumps({"success": bool(res)}))
     `);
     res.json(data);
@@ -352,10 +361,11 @@ print(json.dumps({"success": bool(res)}))
 
 app.delete('/api/config/departments/:id', async (req, res) => {
     const deptId = req.params.id;
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-database.delete_custom_department(${parseInt(deptId, 10)})
+database.delete_custom_department(${parseInt(deptId, 10)}, company_id=${compId})
 print(json.dumps({"success": True}))
     `);
     res.json(data);
@@ -363,20 +373,22 @@ print(json.dumps({"success": True}))
 
 app.get('/api/config/equipment', async (req, res) => {
     const dept = req.query.department || '';
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-print(json.dumps(database.get_custom_equipment(${dept ? JSON.stringify(dept) : 'None'})))
+print(json.dumps(database.get_custom_equipment(${dept ? JSON.stringify(dept) : 'None'}, company_id=${compId})))
     `);
     res.json(Array.isArray(data) ? data : []);
 });
 
 app.post('/api/config/equipment', async (req, res) => {
-    const { department_name, equipment_name } = req.body;
+    const { department_name, equipment_name, company_id } = req.body;
+    const compId = company_id ? JSON.stringify(company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-res = database.add_custom_equipment(${JSON.stringify(department_name || '')}, ${JSON.stringify(equipment_name || '')})
+res = database.add_custom_equipment(${JSON.stringify(department_name || '')}, ${JSON.stringify(equipment_name || '')}, company_id=${compId})
 print(json.dumps({"success": bool(res)}))
     `);
     res.json(data);
@@ -384,20 +396,22 @@ print(json.dumps({"success": bool(res)}))
 
 app.delete('/api/config/equipment/:id', async (req, res) => {
     const eqId = req.params.id;
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-database.delete_custom_equipment(${parseInt(eqId, 10)})
+database.delete_custom_equipment(${parseInt(eqId, 10)}, company_id=${compId})
 print(json.dumps({"success": True}))
     `);
     res.json(data);
 });
 
 app.post('/api/config/seed-template', async (req, res) => {
+    const compId = req.body.company_id ? JSON.stringify(req.body.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-database.seed_default_plant_config()
+database.seed_default_plant_config(company_id=${compId})
 print(json.dumps({"success": True}))
     `);
     res.json(data);
@@ -419,14 +433,16 @@ print(json.dumps(comp))
 });
 
 app.post('/api/auth/login', async (req, res) => {
-    const { username, password, role } = req.body;
+    const { username, password, role, company_id } = req.body;
+    const compId = company_id ? JSON.stringify(company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
 user, err = database.authenticate_user(
     email_or_name=${JSON.stringify(username || '')},
     password=${JSON.stringify(password || '')},
-    role=${JSON.stringify(role || '')}
+    role=${JSON.stringify(role || '')},
+    company_id=${compId}
 )
 if user:
     print(json.dumps({"success": True, "user": user}))
@@ -437,23 +453,26 @@ else:
 });
 
 app.get('/api/users', async (req, res) => {
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-print(json.dumps(database.get_company_users()))
+print(json.dumps(database.get_company_users(company_id=${compId})))
     `);
     res.json(Array.isArray(data) ? data : []);
 });
 
 app.post('/api/users', async (req, res) => {
-    const { email_or_name, password, role } = req.body;
+    const { email_or_name, password, role, company_id } = req.body;
+    const compId = company_id ? JSON.stringify(company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
 user, err = database.add_user(
     email_or_name=${JSON.stringify(email_or_name || '')},
     password=${JSON.stringify(password || '')},
-    role=${JSON.stringify(role || '')}
+    role=${JSON.stringify(role || '')},
+    company_id=${compId}
 )
 if user:
     print(json.dumps({"success": True, "user": user}))
@@ -465,10 +484,11 @@ else:
 
 app.delete('/api/users/:id', async (req, res) => {
     const userId = req.params.id;
+    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
     const data = await runPythonCode(`
 import database, json
 database.init_db()
-database.delete_user(${parseInt(userId, 10)})
+database.delete_user(${parseInt(userId, 10)}, company_id=${compId})
 print(json.dumps({"success": True}))
     `);
     res.json(data);

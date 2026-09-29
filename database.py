@@ -12,12 +12,22 @@ def get_db_connection():
     return conn
 
 # --------------------------------------------------------------------
-# REAL-TIME SUPABASE SYNC HELPERS (HTTP REST API via urllib)
-# --------------------------------------------------------------------
+import uuid
+
+def format_supabase_company_id(company_id):
+    if not company_id or str(company_id).strip().lower() in ("default", "none", ""):
+        return "00000000-0000-0000-0000-000000000000"
+    clean_id = str(company_id).strip()
+    try:
+        uuid.UUID(clean_id)
+        return clean_id
+    except Exception:
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, clean_id))
 
 def sync_to_supabase(table_name, record_dict):
     """
     Pushes/upserts a record into Supabase REST API if SUPABASE_URL & key are configured.
+    Tries POST (insert) first; on HTTP 409 Conflict (duplicate record), executes PATCH (update).
     """
     supabase_url = (
         os.getenv("SUPABASE_URL") or
@@ -36,41 +46,52 @@ def sync_to_supabase(table_name, record_dict):
         return False, "Supabase environment variables not configured"
 
     try:
-        on_conflict_keys = {
-            "breakdowns": "company_id,ticket_number",
-            "maintenance_logs": "company_id,ticket_number",
-            "welding_logs": "company_id,ticket_number",
-            "custom_departments": "company_id,department_name",
-            "custom_equipment": "company_id,department_name,equipment_name",
-            "users": "company_id,email_or_name",
-            "companies": "company_name"
-        }
-        
-        conflict_param = on_conflict_keys.get(table_name)
-        qs = f"?on_conflict={conflict_param}" if conflict_param else ""
-        endpoint = f"{supabase_url}/rest/v1/{table_name}{qs}"
         payload = dict(record_dict)
-        
-        # Strip local SQLite internal flags and autoincrement id
         payload.pop("synced_to_sheets", None)
         payload.pop("id", None)
         
-        # Ensure company_id is a valid UUID string
         comp = payload.get("company_id")
-        if not comp or comp == "default":
-            payload["company_id"] = "00000000-0000-0000-0000-000000000000"
+        payload["company_id"] = format_supabase_company_id(comp)
             
         data_bytes = json.dumps(payload).encode("utf-8")
         
+        # Build query criteria for update (PATCH) check
+        patch_query = None
+        if "ticket_number" in payload and payload["ticket_number"]:
+            patch_query = f"ticket_number=eq.{payload['ticket_number']}"
+        elif table_name == "custom_departments" and "department_name" in payload:
+            patch_query = f"department_name=eq.{urllib.parse.quote(str(payload['department_name']))}&company_id=eq.{payload['company_id']}"
+        elif table_name == "custom_equipment" and "equipment_name" in payload:
+            patch_query = f"equipment_name=eq.{urllib.parse.quote(str(payload['equipment_name']))}&company_id=eq.{payload['company_id']}"
+        elif table_name == "users" and "email_or_name" in payload:
+            patch_query = f"email_or_name=eq.{urllib.parse.quote(str(payload['email_or_name']))}&company_id=eq.{payload['company_id']}"
+        elif table_name == "companies" and "company_name" in payload:
+            patch_query = f"company_name=eq.{urllib.parse.quote(str(payload['company_name']))}"
+
+        # 1. Try POST (insert)
+        endpoint = f"{supabase_url}/rest/v1/{table_name}"
         req = urllib.request.Request(endpoint, data=data_bytes, method="POST")
         req.add_header("apikey", supabase_key)
         req.add_header("Authorization", f"Bearer {supabase_key}")
         req.add_header("Content-Type", "application/json")
-        req.add_header("Prefer", "resolution=merge-duplicates,return=representation")
+        req.add_header("Prefer", "return=representation")
         
-        with urllib.request.urlopen(req, timeout=5) as response:
-            res_body = response.read().decode("utf-8")
-            return True, res_body
+        try:
+            with urllib.request.urlopen(req, timeout=5) as response:
+                res_body = response.read().decode("utf-8")
+                return True, res_body
+        except urllib.error.HTTPError as err:
+            # 2. If 409 Conflict (duplicate record), fall back to PATCH update
+            if err.code == 409 and patch_query:
+                patch_url = f"{supabase_url}/rest/v1/{table_name}?{patch_query}"
+                p_req = urllib.request.Request(patch_url, data=data_bytes, method="PATCH")
+                p_req.add_header("apikey", supabase_key)
+                p_req.add_header("Authorization", f"Bearer {supabase_key}")
+                p_req.add_header("Content-Type", "application/json")
+                p_req.add_header("Prefer", "return=representation")
+                with urllib.request.urlopen(p_req, timeout=5) as p_res:
+                    return True, p_res.read().decode("utf-8")
+            raise err
     except Exception as e:
         print(f"[Supabase Sync Error] Table '{table_name}': {e}")
         return False, str(e)
@@ -97,6 +118,12 @@ def delete_from_supabase(table_name, query_params):
         return False, "Supabase environment variables not configured"
 
     try:
+        if "company_id" in query_params:
+            comp_raw = query_params["company_id"]
+            if comp_raw.startswith("eq."):
+                cid = format_supabase_company_id(comp_raw[3:])
+                query_params["company_id"] = f"eq.{cid}"
+
         qs = urllib.parse.urlencode(query_params)
         endpoint = f"{supabase_url}/rest/v1/{table_name}?{qs}"
         req = urllib.request.Request(endpoint, method="DELETE")
@@ -138,7 +165,7 @@ def fetch_from_supabase(table_name, select="*", order="id.desc", limit=100, comp
         if limit:
             params.append(f"limit={limit}")
         if company_id:
-            cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+            cid = format_supabase_company_id(company_id)
             params.append(f"company_id=eq.{cid}")
             
         qs = "&".join(params)
@@ -181,7 +208,9 @@ def get_or_create_company(company_name):
     row = cursor.fetchone()
     if row:
         conn.close()
-        return {"id": row["id"], "company_name": row["company_name"]}
+        comp_id = row["id"]
+        seed_default_users(comp_id)
+        return {"id": comp_id, "company_name": row["company_name"]}
         
     comp_id = str(uuid.uuid4())
     now_str = datetime.datetime.now().isoformat()
@@ -191,6 +220,7 @@ def get_or_create_company(company_name):
                        (comp_id, clean_name, now_str))
         conn.commit()
         conn.close()
+        seed_default_users(comp_id)
         comp_dict = {"id": comp_id, "company_name": clean_name, "industry": "Manufacturing", "created_at": now_str}
         sync_to_supabase("companies", comp_dict)
         return comp_dict
@@ -447,8 +477,20 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
                 if record:
                     target_table = "welding_logs"
                     
-    # 2. Fallback to searching by equipment_id in breakdowns if no record found yet by ticket_number
-    if not record and equipment_id and str(equipment_id).strip():
+    # 2. If ticket_number was provided but not found in local SQLite, try searching Supabase
+    if not record and ticket_number and str(ticket_number).strip():
+        tn = str(ticket_number).strip()
+        for tbl in ["breakdowns", "maintenance_logs", "welding_logs"]:
+            sp_res = fetch_from_supabase(tbl, limit=50)
+            if sp_res:
+                matching = [r for r in sp_res if r.get('ticket_number') == tn and r.get('status') != 'RESOLVED']
+                if matching:
+                    record = matching[0]
+                    target_table = tbl
+                    break
+
+    # 3. Fallback to searching by equipment_id ONLY if NO ticket_number was provided at all
+    if not record and not ticket_number and equipment_id and str(equipment_id).strip():
         eq = str(equipment_id).strip()
         cursor.execute("SELECT * FROM breakdowns WHERE equipment_id LIKE ? AND status != 'RESOLVED' ORDER BY id DESC LIMIT 1", (f"%{eq}%",))
         record = cursor.fetchone()
@@ -473,50 +515,87 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         except Exception:
             duration_mins = 1
 
-        cursor.execute('''
-            UPDATE breakdowns 
-            SET status = 'RESOLVED',
-                end_time = ?,
-                duration_minutes = ?,
-                resolution_notes = ?,
-                technician = ?,
-                synced_to_sheets = 0
-            WHERE id = ?
-        ''', (end_iso, duration_mins, resolution_notes, technician or rec_dict.get('sender_name') or 'Technician', rec_dict['id']))
+        rec_id = rec_dict.get('id')
+        rec_tn = rec_dict.get('ticket_number')
+        if rec_id:
+            cursor.execute('''
+                UPDATE breakdowns 
+                SET status = 'RESOLVED',
+                    end_time = ?,
+                    duration_minutes = ?,
+                    resolution_notes = ?,
+                    technician = ?,
+                    synced_to_sheets = 0
+                WHERE id = ? OR ticket_number = ?
+            ''', (end_iso, duration_mins, resolution_notes, technician or rec_dict.get('sender_name') or 'Technician', rec_id, rec_tn))
+        else:
+            cursor.execute('''
+                UPDATE breakdowns 
+                SET status = 'RESOLVED',
+                    end_time = ?,
+                    duration_minutes = ?,
+                    resolution_notes = ?,
+                    technician = ?,
+                    synced_to_sheets = 0
+                WHERE ticket_number = ?
+            ''', (end_iso, duration_mins, resolution_notes, technician or rec_dict.get('sender_name') or 'Technician', rec_tn))
         conn.commit()
-        cursor.execute("SELECT * FROM breakdowns WHERE id = ?", (rec_dict['id'],))
-        updated = dict(cursor.fetchone())
         conn.close()
-        sync_to_supabase("breakdowns", updated)
-        return updated, None
+        rec_dict['status'] = 'RESOLVED'
+        rec_dict['end_time'] = end_iso
+        rec_dict['duration_minutes'] = duration_mins
+        rec_dict['resolution_notes'] = resolution_notes
+        rec_dict['technician'] = technician or rec_dict.get('sender_name') or 'Technician'
+        sync_to_supabase("breakdowns", rec_dict)
+        return rec_dict, None
 
     elif target_table == "maintenance_logs":
-        cursor.execute('''
-            UPDATE maintenance_logs 
-            SET status = 'RESOLVED',
-                technician = ?
-            WHERE id = ?
-        ''', (technician or rec_dict.get('technician') or 'Technician', rec_dict['id']))
+        rec_id = rec_dict.get('id')
+        rec_tn = rec_dict.get('ticket_number')
+        if rec_id:
+            cursor.execute('''
+                UPDATE maintenance_logs 
+                SET status = 'RESOLVED',
+                    technician = ?
+                WHERE id = ? OR ticket_number = ?
+            ''', (technician or rec_dict.get('technician') or 'Technician', rec_id, rec_tn))
+        else:
+            cursor.execute('''
+                UPDATE maintenance_logs 
+                SET status = 'RESOLVED',
+                    technician = ?
+                WHERE ticket_number = ?
+            ''', (technician or rec_dict.get('technician') or 'Technician', rec_tn))
         conn.commit()
-        cursor.execute("SELECT * FROM maintenance_logs WHERE id = ?", (rec_dict['id'],))
-        updated = dict(cursor.fetchone())
         conn.close()
-        sync_to_supabase("maintenance_logs", updated)
-        return updated, None
+        rec_dict['status'] = 'RESOLVED'
+        rec_dict['technician'] = technician or rec_dict.get('technician') or 'Technician'
+        sync_to_supabase("maintenance_logs", rec_dict)
+        return rec_dict, None
 
     elif target_table == "welding_logs":
-        cursor.execute('''
-            UPDATE welding_logs 
-            SET status = 'RESOLVED',
-                technician = ?
-            WHERE id = ?
-        ''', (technician or rec_dict.get('sender_name') or 'Welder', rec_dict['id']))
+        rec_id = rec_dict.get('id')
+        rec_tn = rec_dict.get('ticket_number')
+        if rec_id:
+            cursor.execute('''
+                UPDATE welding_logs 
+                SET status = 'RESOLVED',
+                    technician = ?
+                WHERE id = ? OR ticket_number = ?
+            ''', (technician or rec_dict.get('sender_name') or 'Welder', rec_id, rec_tn))
+        else:
+            cursor.execute('''
+                UPDATE welding_logs 
+                SET status = 'RESOLVED',
+                    technician = ?
+                WHERE ticket_number = ?
+            ''', (technician or rec_dict.get('sender_name') or 'Welder', rec_tn))
         conn.commit()
-        cursor.execute("SELECT * FROM welding_logs WHERE id = ?", (rec_dict['id'],))
-        updated = dict(cursor.fetchone())
         conn.close()
-        sync_to_supabase("welding_logs", updated)
-        return updated, None
+        rec_dict['status'] = 'RESOLVED'
+        rec_dict['technician'] = technician or rec_dict.get('sender_name') or 'Welder'
+        sync_to_supabase("welding_logs", rec_dict)
+        return rec_dict, None
 
 def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
     conn = get_db_connection()
@@ -550,7 +629,7 @@ def log_welding(department, equipment_id, location, welding_details, scheduled_t
     cursor.execute('''
         INSERT INTO welding_logs
         (company_id, ticket_number, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, status, assigned_to, technician, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING_APPROVAL', ?, ?, ?)
     ''', (company_id, ticket, department, sender_phone, sender_name, equipment_id, location, welding_details, scheduled_time, assigned_to or 'Unassigned', technician or sender_name, now_str))
     
     conn.commit()
@@ -650,33 +729,45 @@ def get_open_welding():
 
 def get_all_breakdowns(limit=100, company_id=None):
     sp_data = fetch_from_supabase("breakdowns", limit=limit, company_id=company_id)
-    if sp_data is not None and len(sp_data) > 0:
+    if sp_data is not None:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM breakdowns ORDER BY id DESC LIMIT ?", (limit,))
+    if company_id:
+        cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+        cursor.execute("SELECT * FROM breakdowns WHERE company_id = ? ORDER BY id DESC LIMIT ?", (cid, limit))
+    else:
+        cursor.execute("SELECT * FROM breakdowns ORDER BY id DESC LIMIT ?", (limit,))
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
 
 def get_all_maintenance(limit=100, company_id=None):
     sp_data = fetch_from_supabase("maintenance_logs", limit=limit, company_id=company_id)
-    if sp_data is not None and len(sp_data) > 0:
+    if sp_data is not None:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM maintenance_logs ORDER BY id DESC LIMIT ?", (limit,))
+    if company_id:
+        cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+        cursor.execute("SELECT * FROM maintenance_logs WHERE company_id = ? ORDER BY id DESC LIMIT ?", (cid, limit))
+    else:
+        cursor.execute("SELECT * FROM maintenance_logs ORDER BY id DESC LIMIT ?", (limit,))
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
 
 def get_all_welding(limit=100, company_id=None):
     sp_data = fetch_from_supabase("welding_logs", limit=limit, company_id=company_id)
-    if sp_data is not None and len(sp_data) > 0:
+    if sp_data is not None:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM welding_logs ORDER BY id DESC LIMIT ?", (limit,))
+    if company_id:
+        cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+        cursor.execute("SELECT * FROM welding_logs WHERE company_id = ? ORDER BY id DESC LIMIT ?", (cid, limit))
+    else:
+        cursor.execute("SELECT * FROM welding_logs ORDER BY id DESC LIMIT ?", (limit,))
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
