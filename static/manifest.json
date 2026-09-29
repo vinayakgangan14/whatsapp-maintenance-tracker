@@ -1,0 +1,22 @@
+{
+  "name": "Maintenance Tracking Portal",
+  "short_name": "MaintTracker",
+  "description": "Equipment Breakdown & Maintenance Management Suite for Apple iOS and Android",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#10b981",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/000000/maintenance.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/000000/maintenance.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

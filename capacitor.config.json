@@ -1,0 +1,19 @@
+{
+  "appId": "com.maintenancetracker.app",
+  "appName": "Maintenance Tracker",
+  "webDir": "static",
+  "bundledWebRuntime": false,
+  "server": {
+    "url": "https://whatsapp-maintenance-tracker.onrender.com",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#0a0f1e",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    }
+  }
+}
