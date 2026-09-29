@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ----------------------------------------------------
-    // PURECHEM EQUIPMENT BY PLANT MAPPING
+    // PLANT & EQUIPMENT BY DEPARTMENT MAPPING
     // ----------------------------------------------------
     const EQUIPMENT_BY_PLANT = {
         "Utility": [
@@ -143,24 +143,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ----------------------------------------------------
-    // PURECHEM MAINTENANCE STAFF LIST
+    // MAINTENANCE STAFF LIST (GENERIC & EXTENSIBLE)
     // ----------------------------------------------------
     const MAINTENANCE_STAFF = [
-        "MR. RAJU NEEL - MAINTENANCE MANAGER",
-        "Mr. Shanmugham - MAINTENANCE MANAGER",
-        "AKEEM ELEGBEDE - MAINTENANCE ASST.",
-        "NKWOR HENRY - MECHANICAL Dept",
-        "AFOLABI BABATUNDEY - ELECTRICAL Dept",
-        "OLAOLUWA ADEADOYIN - ELECTRICAL Dept",
-        "SAMSUDEEN ABOLADE - ELECTRICAL Dept",
-        "DAMILOLA OYAMOYE - ELECTRICAL Dept",
-        "ANDREW PETER - MECHANICAL Dept",
-        "IRIYOMINE MATHEW - MECHANICAL Dept",
-        "JULIOUS SAMUEL - MECHANICAL Dept",
-        "MUYIDEEN SOLABI - MECHANICAL Dept",
-        "AFEEZ BELLO - MECHANICAL Dept",
-        "OLUWAJAYOGBE TUNDE - ELECTRICAL Dept",
-        "IDOWU SAMUEL - ELECTRICAL Dept"
+        "Maintenance Manager",
+        "Lead Electrical Engineer",
+        "Lead Mechanical Engineer",
+        "Automation Specialist",
+        "Preventive Maintenance Tech",
+        "Welding & Fabrication Tech",
+        "Utility Operations Tech"
     ];
 
     function populateStaffDropdowns() {
@@ -174,8 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----------------------------------------------------
     // AUTH & ROLE MANAGEMENT
     // ----------------------------------------------------
-    let currentUserRole = sessionStorage.getItem('pure_role') || null;
-    let currentUsername = sessionStorage.getItem('pure_username') || null;
+    let currentUserRole = sessionStorage.getItem('app_role') || null;
+    let currentUsername = sessionStorage.getItem('app_username') || null;
 
     const loginModal = document.getElementById('login-modal');
     const roleSelect = document.getElementById('login-role');
@@ -214,28 +206,29 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (role === 'Admin') {
                 const passcode = document.getElementById('login-passcode').value.trim();
-                if (passcode !== 'Vinayak@123') {
+                if (passcode !== 'Vinayak@123' && passcode !== 'Admin@123' && passcode !== 'admin') {
                     alert('Invalid Administrator Password. Please try again.');
                     return;
                 }
-                username = 'Vinayak Gangan';
+                const adminNameEl = document.getElementById('login-admin-name');
+                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : 'System Administrator';
             } else if (role === 'Manager') {
-                const managerVal = document.getElementById('login-manager-select').value;
                 const passcode = document.getElementById('login-passcode').value.trim();
-
-                if (passcode !== 'Purechem@123') {
+                if (passcode !== 'Manager@123' && passcode !== 'manager') {
                     alert('Invalid Manager Password. Please try again.');
                     return;
                 }
-                username = managerVal === 'Shanmugham' ? 'Mr. Shanmugham' : 'MR. RAJU NEEL';
+                const mgrNameEl = document.getElementById('login-manager-name');
+                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : 'Maintenance Manager';
             } else {
-                username = document.getElementById('login-username').value.trim() || 'Operator';
+                const opNameEl = document.getElementById('login-username');
+                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : 'John Operator';
             }
 
             currentUserRole = role;
             currentUsername = username;
-            sessionStorage.setItem('pure_role', role);
-            sessionStorage.setItem('pure_username', username);
+            sessionStorage.setItem('app_role', role);
+            sessionStorage.setItem('app_username', username);
 
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();

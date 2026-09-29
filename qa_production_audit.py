@@ -15,7 +15,7 @@ import google_sheets
 import excel_generator
 
 print("=========================================================")
-print("=== PURECHEM MAINTENANCE TRACKING PORTAL - FULL QA AUDIT ===")
+print("=== MAINTENANCE TRACKER - FULL QA AUDIT ===")
 print("=========================================================\n")
 
 def test_1_database_init():
