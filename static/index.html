@@ -36,26 +36,27 @@
 
             <!-- OPERATOR USERNAME GROUP -->
             <div class="form-group" id="operator-username-group" style="text-align: left;">
-                <label>Your Name / Technician ID</label>
-                <input type="text" id="login-username" placeholder="e.g. John Operator" value="John Technician" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                <label>Operator / Technician Email or Name</label>
+                <input type="text" id="login-username" placeholder="e.g. john.operator@maintenance.com" value="john.operator@maintenance.com" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
             </div>
 
             <!-- MANAGER USERNAME GROUP -->
             <div class="form-group" id="manager-select-group" style="text-align: left; display: none;">
-                <label>Manager Name</label>
-                <input type="text" id="login-manager-name" placeholder="e.g. Maintenance Manager" value="Maintenance Manager" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                <label>Manager Email or Name</label>
+                <input type="text" id="login-manager-name" placeholder="e.g. manager@maintenance.com" value="manager@maintenance.com" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
             </div>
 
             <!-- ADMIN USERNAME GROUP -->
             <div class="form-group" id="admin-username-group" style="text-align: left; display: none;">
-                <label>Administrator Account</label>
-                <input type="text" id="login-admin-name" value="System Administrator" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #10b981; font-weight:600; border: 1px solid rgba(16,185,129,0.3);">
+                <label>Administrator Email or Name</label>
+                <input type="text" id="login-admin-name" placeholder="e.g. vinayak.gangan14@gmail.com" value="vinayak.gangan14@gmail.com" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #10b981; font-weight:600; border: 1px solid rgba(16,185,129,0.3);">
             </div>
 
             <!-- PASSCODE GROUP -->
             <div class="form-group" id="passcode-group" style="text-align: left; display: none;">
                 <label id="passcode-label">Password</label>
-                <input type="password" id="login-passcode" placeholder="Enter Password" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                <input type="password" id="login-passcode" placeholder="Default: Admin@123 or Vinayak@123" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 4px;">Default Admin Password: <code>Admin@123</code> | Demo: <code>Vinayak@123</code></small>
             </div>
 
             <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Portal</button>
@@ -390,6 +391,44 @@
 
             <!-- TAB 7: SETTINGS & HANDOVER -->
             <section id="tab-settings" class="tab-pane">
+                <!-- USER & ACCESS CONTROL PANEL -->
+                <div class="glass-card" style="margin-bottom: 1.5rem; border-left: 4px solid #10b981;">
+                    <h3>👥 User & Access Control Management</h3>
+                    <p class="text-muted">Administrators can create and manage credentials for Managers and Operators.</p>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                        <!-- CREATE NEW USER FORM -->
+                        <div style="background: rgba(0,0,0,0.3); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                            <h4 style="margin-top:0; margin-bottom: 0.75rem; color: #10b981;">Create User Account</h4>
+                            <div class="form-group" style="margin-bottom: 0.75rem;">
+                                <label>User Role</label>
+                                <select id="user-new-role" class="form-control" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                                    <option value="Operator">Operator / Technician</option>
+                                    <option value="Manager">Maintenance Manager</option>
+                                    <option value="Admin">System Administrator</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0.75rem;">
+                                <label>Email ID / Username</label>
+                                <input type="text" id="user-new-email" placeholder="e.g. operator1@company.com" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 1rem;">
+                                <label>Password</label>
+                                <input type="password" id="user-new-password" placeholder="Define User Password" style="width: 100%; padding: 0.65rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.15);">
+                            </div>
+                            <button class="btn btn-emerald" id="btn-create-user" style="width: 100%;">+ Create User Credentials</button>
+                        </div>
+
+                        <!-- ACTIVE USER ACCOUNTS LIST -->
+                        <div style="background: rgba(0,0,0,0.3); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                            <h4 style="margin-top:0; margin-bottom: 0.75rem; color: #3b82f6;">Active User Accounts</h4>
+                            <div id="users-table-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto;">
+                                <small class="text-muted">Loading user accounts...</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="glass-card" style="border-left: 4px solid #ef4444;">
                     <h3>🧹 Client Handover — Clear All Test Data</h3>
                     <p class="text-muted">Use this option when handing over the system to a client. It clears all test breakdown tickets, PM logs, and welding logs for a fresh start.</p>

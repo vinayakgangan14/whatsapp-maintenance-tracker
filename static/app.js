@@ -315,29 +315,48 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (passcodeBtn) {
-        passcodeBtn.addEventListener('click', () => {
+        passcodeBtn.addEventListener('click', async () => {
             const role = document.getElementById('login-role').value;
             let username = '';
-            
+            let passcode = '';
+
             if (role === 'Admin') {
-                const passcode = document.getElementById('login-passcode').value.trim();
-                if (passcode !== 'Vinayak@123' && passcode !== 'Admin@123' && passcode !== 'admin') {
-                    alert('Invalid Administrator Password. Please try again.');
-                    return;
-                }
                 const adminNameEl = document.getElementById('login-admin-name');
-                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : 'System Administrator';
+                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : 'vinayak.gangan14@gmail.com';
+                passcode = document.getElementById('login-passcode').value.trim();
             } else if (role === 'Manager') {
-                const passcode = document.getElementById('login-passcode').value.trim();
-                if (passcode !== 'Manager@123' && passcode !== 'manager') {
-                    alert('Invalid Manager Password. Please try again.');
-                    return;
-                }
                 const mgrNameEl = document.getElementById('login-manager-name');
-                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : 'Maintenance Manager';
+                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : 'manager@maintenance.com';
+                passcode = document.getElementById('login-passcode').value.trim();
             } else {
                 const opNameEl = document.getElementById('login-username');
-                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : 'John Operator';
+                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : 'john.operator@maintenance.com';
+                passcode = document.getElementById('login-passcode').value.trim();
+            }
+
+            // Attempt authentication against backend users database
+            try {
+                const authRes = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password: passcode, role })
+                });
+                const authData = await authRes.json();
+
+                if (authData && authData.success) {
+                    username = authData.user.email_or_name;
+                } else if (role === 'Admin' && (passcode === 'Vinayak@123' || passcode === 'Admin@123' || passcode === 'admin')) {
+                    // Standard demo Admin password fallback
+                } else if (role === 'Manager' && (passcode === 'Manager@123' || passcode === 'manager' || passcode === 'Purechem@123')) {
+                    // Standard demo Manager password fallback
+                } else if (role === 'Operator') {
+                    // Operator mode login
+                } else {
+                    alert('Invalid Username/Email or Password. Please try again.');
+                    return;
+                }
+            } catch (e) {
+                console.warn('API Auth check skipped, using session login.', e);
             }
 
             currentUserRole = role;
@@ -348,8 +367,78 @@ document.addEventListener('DOMContentLoaded', () => {
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
             forceRefreshAll();
+            loadCompanyUsersList();
         });
     }
+
+    // ----------------------------------------------------
+    // USER & ACCESS CONTROL MANAGEMENT LOGIC
+    // ----------------------------------------------------
+    async function loadCompanyUsersList() {
+        const listEl = document.getElementById('users-table-list');
+        if (!listEl) return;
+        try {
+            const res = await fetch('/api/users');
+            const users = await res.json();
+            if (!Array.isArray(users) || !users.length) {
+                listEl.innerHTML = '<small class="text-muted">No user accounts created yet.</small>';
+                return;
+            }
+            listEl.innerHTML = users.map(u => {
+                let badgeColor = u.role === 'Admin' ? '#10b981' : (u.role === 'Manager' ? '#8b5cf6' : '#3b82f6');
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                        <div>
+                            <strong style="color: #fff; font-size: 0.85rem;">${u.email_or_name}</strong>
+                            <span class="badge" style="background: ${badgeColor}; font-size: 0.7rem; margin-left: 6px; padding: 2px 6px;">${u.role}</span>
+                        </div>
+                        <button class="btn btn-sm btn-del-user" data-id="${u.id}" style="border:1px solid #ef4444; color:#ef4444; background:transparent; padding:2px 8px; font-size:0.75rem;">Delete</button>
+                    </div>
+                `;
+            }).join('');
+
+            document.querySelectorAll('.btn-del-user').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.getAttribute('data-id');
+                    if (confirm('Delete this user account?')) {
+                        await fetch(`/api/users/${id}`, { method: 'DELETE' });
+                        loadCompanyUsersList();
+                    }
+                });
+            });
+        } catch (err) {
+            console.error('Error loading users:', err);
+        }
+    }
+
+    const btnCreateUser = document.getElementById('btn-create-user');
+    if (btnCreateUser) {
+        btnCreateUser.addEventListener('click', async () => {
+            const role = document.getElementById('user-new-role').value;
+            const email = document.getElementById('user-new-email').value.trim();
+            const pwd = document.getElementById('user-new-password').value.trim();
+
+            if (!email) return alert('Please enter user Email ID or Username.');
+            if (!pwd) return alert('Please enter user Password.');
+
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email_or_name: email, password: pwd, role })
+            });
+            const data = await res.json();
+            if (data && data.success) {
+                document.getElementById('user-new-email').value = '';
+                document.getElementById('user-new-password').value = '';
+                alert(`User account created successfully! Role: ${role}`);
+                loadCompanyUsersList();
+            } else {
+                alert(data.error || 'Failed to create user account.');
+            }
+        });
+    }
+
+    loadCompanyUsersList();
 
     if (loginModal) {
         loginModal.addEventListener('keydown', (e) => {

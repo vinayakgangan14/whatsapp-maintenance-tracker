@@ -390,6 +390,66 @@ print(json.dumps({"success": True}))
     res.json(data);
 });
 
+// --------------------------------------------------------------------
+// USER AUTHENTICATION & ACCESS CONTROL ENDPOINTS
+// --------------------------------------------------------------------
+
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password, role } = req.body;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+user, err = database.authenticate_user(
+    email_or_name=${JSON.stringify(username || '')},
+    password=${JSON.stringify(password || '')},
+    role=${JSON.stringify(role || '')}
+)
+if user:
+    print(json.dumps({"success": True, "user": user}))
+else:
+    print(json.dumps({"success": False, "error": err}))
+    `);
+    res.json(data);
+});
+
+app.get('/api/users', async (req, res) => {
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+print(json.dumps(database.get_company_users()))
+    `);
+    res.json(Array.isArray(data) ? data : []);
+});
+
+app.post('/api/users', async (req, res) => {
+    const { email_or_name, password, role } = req.body;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+user, err = database.add_user(
+    email_or_name=${JSON.stringify(email_or_name || '')},
+    password=${JSON.stringify(password || '')},
+    role=${JSON.stringify(role || '')}
+)
+if user:
+    print(json.dumps({"success": True, "user": user}))
+else:
+    print(json.dumps({"success": False, "error": err}))
+    `);
+    res.json(data);
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+    const userId = req.params.id;
+    const data = await runPythonCode(`
+import database, json
+database.init_db()
+database.delete_user(${parseInt(userId, 10)})
+print(json.dumps({"success": True}))
+    `);
+    res.json(data);
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });

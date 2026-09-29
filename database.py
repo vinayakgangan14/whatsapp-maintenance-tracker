@@ -123,9 +123,23 @@ def init_db():
         )
     ''')
 
+    # Users & Access Control Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL DEFAULT 'default',
+            email_or_name TEXT NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('Operator', 'Manager', 'Admin')),
+            created_at TEXT NOT NULL,
+            UNIQUE(company_id, email_or_name)
+        )
+    ''')
+
     conn.commit()
     conn.close()
     seed_default_plant_config()
+    seed_default_users()
 
 def generate_ticket_number(prefix="BD"):
     conn = get_db_connection()
@@ -476,16 +490,18 @@ def get_custom_departments(company_id='default'):
 def add_custom_department(department_name, company_id='default'):
     if not department_name or not department_name.strip():
         return False
+    dept_name = department_name.strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     now_str = datetime.datetime.now().isoformat()
     try:
         cursor.execute("INSERT OR IGNORE INTO custom_departments (company_id, department_name, created_at) VALUES (?, ?, ?)",
-                       (company_id, department_name.strip(), now_str))
+                       (company_id, dept_name, now_str))
         conn.commit()
-        dept_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM custom_departments WHERE company_id = ? AND department_name = ?", (company_id, dept_name))
+        row = cursor.fetchone()
         conn.close()
-        return dept_id
+        return row['id'] if row else True
     except Exception as e:
         conn.close()
         return False
@@ -517,16 +533,19 @@ def get_custom_equipment(department_name=None, company_id='default'):
 def add_custom_equipment(department_name, equipment_name, company_id='default'):
     if not department_name or not equipment_name or not equipment_name.strip():
         return False
+    dept_name = department_name.strip()
+    eq_name = equipment_name.strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     now_str = datetime.datetime.now().isoformat()
     try:
         cursor.execute("INSERT OR IGNORE INTO custom_equipment (company_id, department_name, equipment_name, created_at) VALUES (?, ?, ?, ?)",
-                       (company_id, department_name.strip(), equipment_name.strip(), now_str))
+                       (company_id, dept_name, eq_name, now_str))
         conn.commit()
-        eq_id = cursor.lastrowid
+        cursor.execute("SELECT id FROM custom_equipment WHERE company_id = ? AND department_name = ? AND equipment_name = ?", (company_id, dept_name, eq_name))
+        row = cursor.fetchone()
         conn.close()
-        return eq_id
+        return row['id'] if row else True
     except Exception as e:
         conn.close()
         return False
@@ -559,6 +578,90 @@ def seed_default_plant_config(company_id='default'):
                 cursor.execute("INSERT OR IGNORE INTO custom_equipment (company_id, department_name, equipment_name, created_at) VALUES (?, ?, ?, ?)", (company_id, dept, eq, now_str))
         conn.commit()
     conn.close()
+
+# --------------------------------------------------------------------
+# USER AUTHENTICATION & ACCESS CONTROL FUNCTIONS
+# --------------------------------------------------------------------
+
+def seed_default_users(company_id='default'):
+    """Seeds default demo Admin, Manager, and Operator credentials if empty."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE company_id = ?", (company_id,))
+    if cursor.fetchone()['cnt'] == 0:
+        now_str = datetime.datetime.now().isoformat()
+        default_users = [
+            ("vinayak.gangan14@gmail.com", "Vinayak@123", "Admin"),
+            ("admin@maintenance.com", "Admin@123", "Admin"),
+            ("manager@maintenance.com", "Manager@123", "Manager"),
+            ("john.operator@maintenance.com", "Operator@123", "Operator")
+        ]
+        for email, pwd, role in default_users:
+            cursor.execute("INSERT OR IGNORE INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (company_id, email, pwd, role, now_str))
+        conn.commit()
+    conn.close()
+
+def authenticate_user(email_or_name, password, role=None, company_id='default'):
+    if not email_or_name or not password:
+        return False, "Missing credentials"
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    query = "SELECT id, email_or_name, role FROM users WHERE company_id = ? AND (LOWER(email_or_name) = LOWER(?) OR email_or_name = ?) AND password = ?"
+    params = [company_id, email_or_name.strip(), email_or_name.strip(), password.strip()]
+    if role:
+        query += " AND role = ?"
+        params.append(role)
+        
+    cursor.execute(query, tuple(params))
+    user = cursor.fetchone()
+    conn.close()
+    
+    if user:
+        return dict(user), None
+    return False, "Invalid email/username or password"
+
+def get_company_users(company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email_or_name, role, created_at FROM users WHERE company_id = ? ORDER BY role ASC, email_or_name ASC", (company_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def add_user(email_or_name, password, role, company_id='default'):
+    if not email_or_name or not password or not role:
+        return False, "Missing required user fields"
+    if role not in ['Operator', 'Manager', 'Admin']:
+        return False, "Invalid user role"
+        
+    email_clean = email_or_name.strip()
+    pwd_clean = password.strip()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.datetime.now().isoformat()
+    try:
+        cursor.execute("INSERT INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                       (company_id, email_clean, pwd_clean, role, now_str))
+        conn.commit()
+        user_id = cursor.lastrowid
+        conn.close()
+        return {"id": user_id, "email_or_name": email_clean, "role": role}, None
+    except sqlite3.IntegrityError:
+        conn.close()
+        return False, "User email/username already exists"
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+def delete_user(user_id, company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ? AND company_id = ?", (user_id, company_id))
+    conn.commit()
+    conn.close()
+    return True
 
 if __name__ == "__main__":
     init_db()
