@@ -2,81 +2,356 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { execSync, spawn } = require('child_process');
+const http = require('http');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Python microservice port
+const PY_PORT = process.env.PY_PORT || (process.env.PORT ? parseInt(process.env.PORT) - 1000 : 5555);
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/static', express.static(path.join(__dirname, 'static')));
 
-function getPythonExecutable() {
-    if (fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe'))) {
-        return path.join(__dirname, '.venv', 'Scripts', 'python.exe');
-    }
-    if (process.platform === 'win32') return 'python';
-    try {
-        execSync('python3 --version', { stdio: 'ignore' });
-        return 'python3';
-    } catch (e) {
-        return 'python';
-    }
-}
+// ----------------------------------------------------------------
+// PYTHON MICROSERVICE PROXY — All DB calls go through persistent service
+// ----------------------------------------------------------------
 
-// Execute python helper script
-function runPythonCode(pythonCode) {
-    return new Promise((resolve) => {
-        try {
-            const pyExec = getPythonExecutable();
-            const proc = spawn(pyExec, ['-c', pythonCode]);
-            let output = '';
+/**
+ * Make an HTTP request to the persistent Python database microservice.
+ * Returns a Promise that resolves with parsed JSON.
+ */
+function pyRequest(method, urlPath, bodyObj = null) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: '127.0.0.1',
+            port: PY_PORT,
+            path: urlPath,
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 15000
+        };
 
-            proc.stdout.on('data', (data) => { output += data.toString(); });
-            proc.stderr.on('data', (data) => { console.error('PyErr:', data.toString()); });
-
-            proc.on('close', () => {
+        const req = http.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => { data += chunk; });
+            res.on('end', () => {
                 try {
-                    resolve(JSON.parse(output.trim()));
+                    resolve({ status: res.statusCode, body: JSON.parse(data) });
                 } catch (e) {
-                    resolve({ raw: output.trim() });
+                    resolve({ status: res.statusCode, body: { raw: data } });
                 }
             });
-        } catch (e) {
-            resolve({ error: String(e) });
+        });
+
+        req.on('error', (e) => {
+            console.error(`[Py Proxy Error] ${method} ${urlPath}:`, e.message);
+            reject(e);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Python service timeout'));
+        });
+
+        if (bodyObj) {
+            req.write(JSON.stringify(bodyObj));
         }
+        req.end();
     });
 }
 
-// Proxy stats, breakdowns, maintenance, welding to Python Database engine
+// Helper: proxy GET with query string passthrough
+async function pyGet(apiPath, query = {}) {
+    const qs = Object.entries(query)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+    const fullPath = qs ? `${apiPath}?${qs}` : apiPath;
+    const { body } = await pyRequest('GET', fullPath);
+    return body;
+}
+
+// Helper: proxy POST with JSON body
+async function pyPost(apiPath, data = {}) {
+    const { status, body } = await pyRequest('POST', apiPath, data);
+    return { status, body };
+}
+
+// Helper: proxy DELETE with query string
+async function pyDelete(apiPath, query = {}) {
+    const qs = Object.entries(query)
+        .filter(([, v]) => v !== undefined && v !== null && v !== '')
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+    const fullPath = qs ? `${apiPath}?${qs}` : apiPath;
+    const { body } = await pyRequest('DELETE', fullPath);
+    return body;
+}
+
+// ----------------------------------------------------------------
+// GET ENDPOINTS — Proxy to Python microservice
+// ----------------------------------------------------------------
+
 app.get('/api/stats', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
-    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_statistics(company_id=${compId})))`);
-    res.json(data.raw ? {} : data);
+    try {
+        const data = await pyGet('/api/stats', { company_id: req.query.company_id });
+        res.json(data || {});
+    } catch (e) { res.json({}); }
 });
 
 app.get('/api/breakdowns', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
-    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_breakdowns(company_id=${compId})))`);
-    res.json(Array.isArray(data) ? data : []);
+    try {
+        const data = await pyGet('/api/breakdowns', { company_id: req.query.company_id });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
 });
 
 app.get('/api/maintenance', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
-    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_maintenance(company_id=${compId})))`);
-    res.json(Array.isArray(data) ? data : []);
+    try {
+        const data = await pyGet('/api/maintenance', { company_id: req.query.company_id });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
 });
 
 app.get('/api/welding', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : 'None';
-    const data = await runPythonCode(`import database, json; database.init_db(); print(json.dumps(database.get_all_welding(company_id=${compId})))`);
-    res.json(Array.isArray(data) ? data : []);
+    try {
+        const data = await pyGet('/api/welding', { company_id: req.query.company_id });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
 });
 
-// Debug: test Google Sheets connection and show service account email
+app.get('/api/settings', async (req, res) => {
+    try {
+        const data = await pyGet('/api/settings');
+        res.json(data || {});
+    } catch (e) { res.json({}); }
+});
+
+app.get('/api/config/departments', async (req, res) => {
+    try {
+        const data = await pyGet('/api/config/departments', { company_id: req.query.company_id });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
+});
+
+app.get('/api/config/equipment', async (req, res) => {
+    try {
+        const data = await pyGet('/api/config/equipment', {
+            company_id: req.query.company_id,
+            department: req.query.department
+        });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
+});
+
+app.get('/api/users', async (req, res) => {
+    try {
+        const data = await pyGet('/api/users', { company_id: req.query.company_id });
+        res.json(Array.isArray(data) ? data : []);
+    } catch (e) { res.json([]); }
+});
+
+app.get('/api/companies/check-admin', async (req, res) => {
+    try {
+        const data = await pyGet('/api/companies/check-admin', { company_id: req.query.company_id });
+        res.json(data || { has_admin: false, admin_count: 0 });
+    } catch (e) { res.json({ has_admin: false, admin_count: 0 }); }
+});
+
+// ----------------------------------------------------------------
+// POST ENDPOINTS — Proxy to Python microservice
+// ----------------------------------------------------------------
+
+app.post('/api/breakdowns/log', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/breakdowns/log', req.body);
+        res.json(body.ticket ? body : { message: "Logged" });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/pm/log', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/pm/log', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/welding/log', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/welding/log', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ticket/approve', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/ticket/approve', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ticket/reject', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/ticket/reject', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/ticket/assign', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/ticket/assign', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/breakdowns/resolve', async (req, res) => {
+    try {
+        const { status, body } = await pyPost('/api/breakdowns/resolve', req.body);
+        if (body.err) {
+            return res.status(400).json({ detail: body.err });
+        }
+        res.json({ message: "Breakdown resolved successfully", record: body.updated });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/config/departments', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/config/departments', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/config/departments/:id', async (req, res) => {
+    try {
+        const data = await pyDelete(`/api/config/departments/${req.params.id}`, {
+            company_id: req.query.company_id
+        });
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/config/equipment', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/config/equipment', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/config/equipment/:id', async (req, res) => {
+    try {
+        const data = await pyDelete(`/api/config/equipment/${req.params.id}`, {
+            company_id: req.query.company_id
+        });
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/config/seed-template', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/config/seed-template', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/companies/register', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/companies/register', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/auth/login', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/auth/register-admin', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/auth/register-admin', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/users', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/users', req.body);
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+    try {
+        const data = await pyDelete(`/api/users/${req.params.id}`, {
+            company_id: req.query.company_id
+        });
+        res.json(data);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/reset-database', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/reset-database', {});
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.all('/api/supabase/sync-all', async (req, res) => {
+    try {
+        const { body } = await pyPost('/api/supabase/sync-all', {});
+        res.json(body);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.all('/api/sync-all', async (req, res) => {
+    try {
+        // Google Sheets sync still uses spawn since it requires google_sheets module
+        const pyExec = getPythonExecutable();
+        const proc = spawn(pyExec, ['-c', `
+import database, json, google_sheets
+database.init_db()
+ok, data = google_sheets.sync_all_records_batch()
+if ok:
+    print(json.dumps(data))
+else:
+    print(json.dumps({"error": data}))
+        `]);
+        let output = '';
+        proc.stdout.on('data', (d) => { output += d.toString(); });
+        proc.stderr.on('data', (d) => { console.error('PyErr:', d.toString()); });
+        proc.on('close', () => {
+            try { res.json(JSON.parse(output.trim())); }
+            catch (e) { res.json({ error: output.trim() }); }
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/export/excel', (req, res) => {
+    try {
+        const pyExec = getPythonExecutable();
+        const { execSync } = require('child_process');
+        execSync(`${pyExec} -c "import excel_generator; excel_generator.generate_excel_report()"`);
+        const exportsDir = path.join(__dirname, 'exports');
+        const files = fs.readdirSync(exportsDir);
+        if (files.length > 0) {
+            const latestFile = files.sort().reverse()[0];
+            return res.download(path.join(exportsDir, latestFile));
+        }
+        res.status(404).send('No report generated');
+    } catch (e) {
+        res.status(500).send('Error generating report');
+    }
+});
+
 app.get('/api/debug-sheets', async (req, res) => {
-    const code = `
+    try {
+        const pyExec = getPythonExecutable();
+        const proc = spawn(pyExec, ['-c', `
 import json, os, google_sheets, database
 database.init_db()
 result = {"status": "unknown", "email": "", "error": ""}
@@ -100,404 +375,82 @@ except Exception as e:
     result["status"] = "ERROR"
     result["error"] = str(e)
 print(json.dumps(result))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data.raw ? { error: data.raw } : data);
+        `]);
+        let output = '';
+        proc.stdout.on('data', (d) => { output += d.toString(); });
+        proc.stderr.on('data', (d) => { console.error('PyErr:', d.toString()); });
+        proc.on('close', () => {
+            try { res.json(JSON.parse(output.trim())); }
+            catch (e) { res.json({ error: output.trim() }); }
+        });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// One-time fast batch sync: push ALL records to Google Sheets (supports GET & POST)
-app.all('/api/sync-all', async (req, res) => {
-    const code = `
-import database, json, google_sheets
-database.init_db()
-ok, data = google_sheets.sync_all_records_batch()
-if ok:
-    print(json.dumps(data))
-else:
-    print(json.dumps({"error": data}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data.raw ? { error: data.raw } : data);
-});
+// ----------------------------------------------------------------
+// STATIC FILES & STARTUP
+// ----------------------------------------------------------------
 
-// Batch sync all records to Supabase
-app.all('/api/supabase/sync-all', async (req, res) => {
-    const code = `
-import database, json
-database.init_db()
-data = database.sync_all_to_supabase()
-print(json.dumps(data))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-
-// Clear all database records and Google Sheets for client handover
-app.post('/api/reset-database', async (req, res) => {
-    const code = `
-import database, json, google_sheets
-database.init_db()
-database.clear_all_records()
-sheet_ok, sheet_msg = google_sheets.clear_google_sheet_records()
-print(json.dumps({"message": "Database and Google Sheets cleared successfully", "sheets_cleared": sheet_ok}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-// Instant Breakdown Log
-app.post('/api/breakdowns/log', async (req, res) => {
-    const { department, equipment_id, issue_description, sender_name, company_id } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ticket, bd_id = database.log_breakdown(
-    department=${JSON.stringify(department || 'General')},
-    equipment_id=${JSON.stringify(equipment_id)},
-    issue_description=${JSON.stringify(issue_description)},
-    sender_name=${JSON.stringify(sender_name || 'Web Portal User')},
-    company_id=${JSON.stringify(company_id || 'default')}
-)
-open_bds = database.get_open_breakdowns()
-matching = [b for b in open_bds if b['ticket_number'] == ticket]
-if matching:
-    t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(matching[0],))
-    t.start()
-    t.join(timeout=3.0)
-print(json.dumps({"ticket": ticket, "id": bd_id}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data.ticket ? data : { message: "Logged" });
-});
-
-// Instant PM Log
-app.post('/api/pm/log', async (req, res) => {
-    const { department, equipment_id, activity_description, scheduled_time, technician, company_id } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ticket = database.log_maintenance(
-    department=${JSON.stringify(department || 'General')},
-    equipment_id=${JSON.stringify(equipment_id)},
-    activity_description=${JSON.stringify(activity_description)},
-    scheduled_time=${JSON.stringify(scheduled_time || 'As Scheduled')},
-    technician=${JSON.stringify(technician || 'Maintenance Tech')},
-    company_id=${JSON.stringify(company_id || 'default')}
-)
-payload = {"ticket_number": ticket, "department": ${JSON.stringify(department || 'General')}, "equipment_id": ${JSON.stringify(equipment_id)}, "activity_description": ${JSON.stringify(activity_description)}, "performed_at": ${JSON.stringify(scheduled_time || 'Today')}, "technician": ${JSON.stringify(technician || 'Tech')}}
-t = threading.Thread(target=google_sheets.sync_maintenance_to_sheet, args=(payload,))
-t.start()
-t.join(timeout=3.0)
-print(json.dumps({"ticket": ticket}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-// Instant Welding Log
-app.post('/api/welding/log', async (req, res) => {
-    const { department, equipment_id, welding_details, scheduled_time, technician, company_id } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ticket = database.log_welding(
-    department=${JSON.stringify(department || 'General')},
-    equipment_id=${JSON.stringify(equipment_id)},
-    location=${JSON.stringify(department || 'General')},
-    welding_details=${JSON.stringify(welding_details)},
-    scheduled_time=${JSON.stringify(scheduled_time || 'Today')},
-    technician=${JSON.stringify(technician || 'Welder')},
-    company_id=${JSON.stringify(company_id || 'default')}
-)
-t = threading.Thread(target=google_sheets.sync_all_records_batch)
-t.start()
-t.join(timeout=3.0)
-print(json.dumps({"ticket": ticket}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-app.post('/api/ticket/approve', async (req, res) => {
-    const { ticket_number, manager_name } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ok, msg = database.approve_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')})
-if ok:
-    t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.start()
-    t.join(timeout=3.0)
-print(json.dumps({"ok": ok, "msg": msg}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-app.post('/api/ticket/reject', async (req, res) => {
-    const { ticket_number, manager_name, reason } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ok, msg = database.reject_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(manager_name || 'Maintenance Manager')}, ${JSON.stringify(reason || '')})
-if ok:
-    t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.start()
-    t.join(timeout=3.0)
-print(json.dumps({"ok": ok, "msg": msg}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-app.post('/api/ticket/assign', async (req, res) => {
-    const { ticket_number, assigned_to } = req.body;
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-ok, msg = database.assign_ticket(${JSON.stringify(ticket_number)}, ${JSON.stringify(assigned_to || 'Unassigned')})
-if ok:
-    t = threading.Thread(target=google_sheets.sync_all_records_batch)
-    t.start()
-    t.join(timeout=3.0)
-print(json.dumps({"ok": ok, "msg": msg}))
-    `;
-    const data = await runPythonCode(code);
-    res.json(data);
-});
-
-app.post('/api/breakdowns/resolve', async (req, res) => {
-    const { ticket_number, equipment_id, resolution_notes, technician } = req.body;
-
-    const pyTicket   = ticket_number   ? JSON.stringify(ticket_number)   : 'None';
-    const pyEquip    = equipment_id    ? JSON.stringify(equipment_id)    : 'None';
-    const pyNotes    = JSON.stringify(resolution_notes || 'Fixed manually via dashboard');
-    const pyTech     = JSON.stringify(technician || 'Technician');
-
-    const code = `
-import database, json, threading, google_sheets
-database.init_db()
-updated, err = database.resolve_breakdown(
-    ticket_number=${pyTicket},
-    equipment_id=${pyEquip},
-    resolution_notes=${pyNotes},
-    technician=${pyTech}
-)
-if updated:
-    t = threading.Thread(target=google_sheets.sync_breakdown_to_sheet, args=(updated,))
-    t.start()
-    t.join(timeout=3.0)
-print(json.dumps({"updated": updated, "err": err}))
-    `;
-    const data = await runPythonCode(code);
-    if (data.err) {
-        return res.status(400).json({ detail: data.err });
+function getPythonExecutable() {
+    if (fs.existsSync(path.join(__dirname, '.venv', 'Scripts', 'python.exe'))) {
+        return path.join(__dirname, '.venv', 'Scripts', 'python.exe');
     }
-    res.json({ message: "Breakdown resolved successfully", record: data.updated });
-});
-
-app.get('/api/export/excel', (req, res) => {
+    if (process.platform === 'win32') return 'python';
     try {
-        const pyExec = getPythonExecutable();
-        execSync(`${pyExec} -c "import excel_generator; excel_generator.generate_excel_report()"`);
-        const exportsDir = path.join(__dirname, 'exports');
-        const files = fs.readdirSync(exportsDir);
-        if (files.length > 0) {
-            const latestFile = files.sort().reverse()[0];
-            return res.download(path.join(exportsDir, latestFile));
-        }
-        res.status(404).send('No report generated');
+        const { execSync } = require('child_process');
+        execSync('python3 --version', { stdio: 'ignore' });
+        return 'python3';
     } catch (e) {
-        res.status(500).send('Error generating report');
+        return 'python';
     }
-});
-
-app.get('/api/settings', async (req, res) => {
-    const data = await runPythonCode(`
-import database, json, os, config
-database.init_db()
-has_creds = os.path.exists(config.CREDENTIALS_FILE) or bool(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-has_spreadsheet = bool(
-    os.getenv("GOOGLE_SPREADSHEET_ID")
-    or database.get_setting("GOOGLE_SPREADSHEET_ID")
-    or config.DEFAULT_CONFIG.get("GOOGLE_SPREADSHEET_ID")
-)
-print(json.dumps({
-    "spreadsheet_id": os.getenv("GOOGLE_SPREADSHEET_ID") or database.get_setting("GOOGLE_SPREADSHEET_ID") or config.DEFAULT_CONFIG["GOOGLE_SPREADSHEET_ID"],
-    "sheet_name": os.getenv("GOOGLE_SHEET_NAME") or database.get_setting("GOOGLE_SHEET_NAME") or config.DEFAULT_CONFIG["GOOGLE_SHEET_NAME"],
-    "has_google_credentials": has_creds,
-    "has_spreadsheet_configured": has_spreadsheet
-}))
-    `);
-    res.json(data.raw ? {} : data);
-});
-
-// --------------------------------------------------------------------
-// DYNAMIC PLANT & EQUIPMENT CONFIGURATION ENDPOINTS
-// --------------------------------------------------------------------
-
-app.get('/api/config/departments', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-print(json.dumps(database.get_custom_departments(company_id=${compId})))
-    `);
-    res.json(Array.isArray(data) ? data : []);
-});
-
-app.post('/api/config/departments', async (req, res) => {
-    const { department_name, company_id } = req.body;
-    const compId = company_id ? JSON.stringify(company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-res = database.add_custom_department(${JSON.stringify(department_name || '')}, company_id=${compId})
-print(json.dumps({"success": bool(res)}))
-    `);
-    res.json(data);
-});
-
-app.delete('/api/config/departments/:id', async (req, res) => {
-    const deptId = req.params.id;
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-database.delete_custom_department(${parseInt(deptId, 10)}, company_id=${compId})
-print(json.dumps({"success": True}))
-    `);
-    res.json(data);
-});
-
-app.get('/api/config/equipment', async (req, res) => {
-    const dept = req.query.department || '';
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-print(json.dumps(database.get_custom_equipment(${dept ? JSON.stringify(dept) : 'None'}, company_id=${compId})))
-    `);
-    res.json(Array.isArray(data) ? data : []);
-});
-
-app.post('/api/config/equipment', async (req, res) => {
-    const { department_name, equipment_name, company_id } = req.body;
-    const compId = company_id ? JSON.stringify(company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-res = database.add_custom_equipment(${JSON.stringify(department_name || '')}, ${JSON.stringify(equipment_name || '')}, company_id=${compId})
-print(json.dumps({"success": bool(res)}))
-    `);
-    res.json(data);
-});
-
-app.delete('/api/config/equipment/:id', async (req, res) => {
-    const eqId = req.params.id;
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-database.delete_custom_equipment(${parseInt(eqId, 10)}, company_id=${compId})
-print(json.dumps({"success": True}))
-    `);
-    res.json(data);
-});
-
-app.post('/api/config/seed-template', async (req, res) => {
-    const compId = req.body.company_id ? JSON.stringify(req.body.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-database.seed_default_plant_config(company_id=${compId})
-print(json.dumps({"success": True}))
-    `);
-    res.json(data);
-});
-
-// --------------------------------------------------------------------
-// USER AUTHENTICATION & ACCESS CONTROL ENDPOINTS
-// --------------------------------------------------------------------
-
-app.post('/api/companies/register', async (req, res) => {
-    const { company_name } = req.body;
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-comp = database.get_or_create_company(${JSON.stringify(company_name || 'Default Workspace')})
-print(json.dumps(comp))
-    `);
-    res.json(data);
-});
-
-app.post('/api/auth/login', async (req, res) => {
-    const { username, password, role, company_id } = req.body;
-    const compId = company_id ? JSON.stringify(company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-user, err = database.authenticate_user(
-    email_or_name=${JSON.stringify(username || '')},
-    password=${JSON.stringify(password || '')},
-    role=${JSON.stringify(role || '')},
-    company_id=${compId}
-)
-if user:
-    print(json.dumps({"success": True, "user": user}))
-else:
-    print(json.dumps({"success": False, "error": err}))
-    `);
-    res.json(data);
-});
-
-app.get('/api/users', async (req, res) => {
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-print(json.dumps(database.get_company_users(company_id=${compId})))
-    `);
-    res.json(Array.isArray(data) ? data : []);
-});
-
-app.post('/api/users', async (req, res) => {
-    const { email_or_name, password, role, company_id } = req.body;
-    const compId = company_id ? JSON.stringify(company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-user, err = database.add_user(
-    email_or_name=${JSON.stringify(email_or_name || '')},
-    password=${JSON.stringify(password || '')},
-    role=${JSON.stringify(role || '')},
-    company_id=${compId}
-)
-if user:
-    print(json.dumps({"success": True, "user": user}))
-else:
-    print(json.dumps({"success": False, "error": err}))
-    `);
-    res.json(data);
-});
-
-app.delete('/api/users/:id', async (req, res) => {
-    const userId = req.params.id;
-    const compId = req.query.company_id ? JSON.stringify(req.query.company_id) : '"default"';
-    const data = await runPythonCode(`
-import database, json
-database.init_db()
-database.delete_user(${parseInt(userId, 10)}, company_id=${compId})
-print(json.dumps({"success": True}))
-    `);
-    res.json(data);
-});
+}
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
-app.listen(PORT, async () => {
-    console.log(`🚀 Maintenance Portal running on port ${PORT}`);
-});
+// Wait for Python microservice to be ready, then start Express
+function waitForPythonService(retries = 30, delay = 1000) {
+    return new Promise((resolve, reject) => {
+        function attempt(n) {
+            const req = http.request({
+                hostname: '127.0.0.1',
+                port: PY_PORT,
+                path: '/health',
+                method: 'GET',
+                timeout: 2000
+            }, (res) => {
+                resolve(true);
+            });
+            req.on('error', () => {
+                if (n <= 0) {
+                    reject(new Error('Python microservice did not start'));
+                } else {
+                    setTimeout(() => attempt(n - 1), delay);
+                }
+            });
+            req.on('timeout', () => {
+                req.destroy();
+                if (n <= 0) reject(new Error('Python microservice timeout'));
+                else setTimeout(() => attempt(n - 1), delay);
+            });
+            req.end();
+        }
+        attempt(retries);
+    });
+}
+
+async function startServer() {
+    console.log(`⏳ Waiting for Python database service on port ${PY_PORT}...`);
+    try {
+        await waitForPythonService();
+        console.log(`✅ Python database service ready on port ${PY_PORT}`);
+    } catch (e) {
+        console.error(`⚠️ Python service not detected: ${e.message}. Starting Express anyway...`);
+    }
+
+    app.listen(PORT, () => {
+        console.log(`🚀 Maintenance Portal running on port ${PORT}`);
+    });
+}
+
+startServer();

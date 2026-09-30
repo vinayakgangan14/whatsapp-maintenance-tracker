@@ -209,7 +209,6 @@ def get_or_create_company(company_name):
     if row:
         conn.close()
         comp_id = row["id"]
-        seed_default_users(comp_id)
         return {"id": comp_id, "company_name": row["company_name"]}
         
     comp_id = str(uuid.uuid4())
@@ -220,7 +219,6 @@ def get_or_create_company(company_name):
                        (comp_id, clean_name, now_str))
         conn.commit()
         conn.close()
-        seed_default_users(comp_id)
         comp_dict = {"id": comp_id, "company_name": clean_name, "industry": "Manufacturing", "created_at": now_str}
         sync_to_supabase("companies", comp_dict)
         return comp_dict
@@ -405,8 +403,6 @@ def init_db():
 
     conn.commit()
     conn.close()
-    seed_default_plant_config()
-    seed_default_users()
 
 def generate_ticket_number(prefix="BD"):
     conn = get_db_connection()
@@ -449,7 +445,7 @@ def log_breakdown(department, equipment_id, issue_description, sender_phone="", 
     sync_to_supabase("breakdowns", row_dict)
     return ticket, breakdown_id
 
-def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes="", technician="", department="General"):
+def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes="", technician="", department="General", company_id=None):
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -481,7 +477,7 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
     if not record and ticket_number and str(ticket_number).strip():
         tn = str(ticket_number).strip()
         for tbl in ["breakdowns", "maintenance_logs", "welding_logs"]:
-            sp_res = fetch_from_supabase(tbl, limit=50)
+            sp_res = fetch_from_supabase(tbl, limit=50, company_id=company_id)
             if sp_res:
                 matching = [r for r in sp_res if r.get('ticket_number') == tn and r.get('status') != 'RESOLVED']
                 if matching:
@@ -729,7 +725,7 @@ def get_open_welding():
 
 def get_all_breakdowns(limit=100, company_id=None):
     sp_data = fetch_from_supabase("breakdowns", limit=limit, company_id=company_id)
-    if sp_data is not None:
+    if sp_data:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -744,7 +740,7 @@ def get_all_breakdowns(limit=100, company_id=None):
 
 def get_all_maintenance(limit=100, company_id=None):
     sp_data = fetch_from_supabase("maintenance_logs", limit=limit, company_id=company_id)
-    if sp_data is not None:
+    if sp_data:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -759,7 +755,7 @@ def get_all_maintenance(limit=100, company_id=None):
 
 def get_all_welding(limit=100, company_id=None):
     sp_data = fetch_from_supabase("welding_logs", limit=limit, company_id=company_id)
-    if sp_data is not None:
+    if sp_data:
         return sp_data
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1010,6 +1006,14 @@ def get_company_users(company_id='default'):
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def check_company_has_admin(company_id='default'):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE company_id = ? AND role = 'Admin'", (company_id,))
+    cnt = cursor.fetchone()['cnt']
+    conn.close()
+    return {"has_admin": cnt > 0, "admin_count": cnt}
 
 def add_user(email_or_name, password, role, company_id='default'):
     if not email_or_name or not password or not role:

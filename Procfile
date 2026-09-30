@@ -1,1 +1,1 @@
-web: node server.js
+web: python database_server.py & node server.js

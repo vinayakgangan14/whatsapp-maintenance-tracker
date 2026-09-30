@@ -295,25 +295,37 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDynamicDepartmentsAndEquipment();
 
     // ----------------------------------------------------
-    // MAINTENANCE STAFF LIST (GENERIC & EXTENSIBLE)
+    // DYNAMIC COMPANY STAFF LIST (fetched from registered users)
     // ----------------------------------------------------
-    const MAINTENANCE_STAFF = [
-        "Maintenance Manager",
-        "Lead Electrical Engineer",
-        "Lead Mechanical Engineer",
-        "Automation Specialist",
-        "Preventive Maintenance Tech",
-        "Welding & Fabrication Tech",
-        "Utility Operations Tech"
-    ];
+    let cachedCompanyUsers = [];
+
+    async function loadCompanyStaffForDropdowns() {
+        try {
+            const cid = encodeURIComponent(getCompanyId());
+            const res = await fetch(`/api/users?company_id=${cid}`);
+            const users = await res.json();
+            cachedCompanyUsers = Array.isArray(users) ? users : [];
+            populateStaffDropdowns();
+        } catch (err) {
+            console.error('Error loading company staff:', err);
+        }
+    }
 
     function populateStaffDropdowns() {
+        const staffNames = cachedCompanyUsers
+            .filter(u => u.role === 'Operator' || u.role === 'Manager')
+            .map(u => u.email_or_name);
+
         document.querySelectorAll('.staff-dropdown').forEach(select => {
+            const currentVal = select.value;
             select.innerHTML = '<option value="Unassigned">-- Select Maintenance Staff --</option>' +
-                MAINTENANCE_STAFF.map(staff => `<option value="${staff}">${staff}</option>`).join('');
+                staffNames.map(name => `<option value="${name}">${name}</option>`).join('');
+            if (currentVal && staffNames.includes(currentVal)) {
+                select.value = currentVal;
+            }
         });
     }
-    populateStaffDropdowns();
+    loadCompanyStaffForDropdowns();
 
     // ----------------------------------------------------
     // AUTH & ROLE MANAGEMENT
@@ -359,21 +371,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (role === 'Admin') {
                 const adminNameEl = document.getElementById('login-admin-name');
-                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : 'vinayak.gangan14@gmail.com';
+                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : '';
                 passcode = document.getElementById('login-passcode').value.trim();
             } else if (role === 'Manager') {
                 const mgrNameEl = document.getElementById('login-manager-name');
-                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : 'manager@maintenance.com';
+                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : '';
                 passcode = document.getElementById('login-passcode').value.trim();
             } else {
                 const opNameEl = document.getElementById('login-username');
-                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : 'john.operator@maintenance.com';
+                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : '';
                 passcode = document.getElementById('login-passcode').value.trim();
             }
 
-            const companyInput = document.getElementById('login-company-name');
-            const companyName = (companyInput && companyInput.value.trim()) ? companyInput.value.trim() : 'Purechem Industries';
+            if (!username) {
+                alert('Please enter your Email / Username.');
+                return;
+            }
 
+            const companyInput = document.getElementById('login-company-name');
+            const companyName = (companyInput && companyInput.value.trim()) ? companyInput.value.trim() : '';
+            if (!companyName) {
+                alert('Please enter your Company / Plant Name.');
+                return;
+            }
+
+            // Step 1: Register or find company
+            let companyId = 'default';
             try {
                 const compRes = await fetch('/api/companies/register', {
                     method: 'POST',
@@ -382,35 +405,72 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 const compData = await compRes.json();
                 if (compData && compData.id) {
-                    sessionStorage.setItem('app_company_id', compData.id);
+                    companyId = compData.id;
+                    sessionStorage.setItem('app_company_id', companyId);
                 }
             } catch (err) {
                 console.warn('Company registration check skipped:', err);
             }
 
-            // Attempt authentication against backend users database
+            // Step 2: Check if this company has an Admin yet
+            if (role === 'Admin') {
+                try {
+                    const checkRes = await fetch(`/api/companies/check-admin?company_id=${encodeURIComponent(companyId)}`);
+                    const checkData = await checkRes.json();
+
+                    if (!checkData.has_admin) {
+                        // FIRST-TIME ADMIN SETUP — Register this user as Admin
+                        if (!passcode || passcode.length < 4) {
+                            alert('This is a new company workspace. Please set a strong password (minimum 4 characters) for the Administrator account.');
+                            return;
+                        }
+                        try {
+                            const regRes = await fetch('/api/auth/register-admin', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email_or_name: username, password: passcode, company_id: companyId })
+                            });
+                            const regData = await regRes.json();
+                            if (regData && regData.success) {
+                                alert(`✅ Administrator account created successfully for "${companyName}"!\n\nYour workspace is 100% blank — add departments, machines, and user accounts to get started.`);
+                            } else {
+                                alert('Failed to create Admin account: ' + (regData.error || 'Unknown error'));
+                                return;
+                            }
+                        } catch (e) {
+                            alert('Error creating Admin account. Please try again.');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Admin check skipped:', e);
+                }
+            }
+
+            // Step 3: Authenticate against backend
+            if (!passcode) {
+                alert('Please enter your Password.');
+                return;
+            }
+
             try {
                 const authRes = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password: passcode, role, company_id: getCompanyId() })
+                    body: JSON.stringify({ username, password: passcode, role, company_id: companyId })
                 });
                 const authData = await authRes.json();
 
                 if (authData && authData.success) {
                     username = authData.user.email_or_name;
-                } else if (role === 'Admin' && (passcode === 'Vinayak@123' || passcode === 'Admin@123' || passcode === 'admin')) {
-                    // Standard demo Admin password fallback
-                } else if (role === 'Manager' && (passcode === 'Manager@123' || passcode === 'manager' || passcode === 'Purechem@123')) {
-                    // Standard demo Manager password fallback
-                } else if (role === 'Operator') {
-                    // Operator mode login
                 } else {
                     alert('Invalid Username/Email or Password. Please try again.');
                     return;
                 }
             } catch (e) {
-                console.warn('API Auth check skipped, using session login.', e);
+                console.warn('API Auth check failed:', e);
+                alert('Unable to connect to authentication service. Please try again.');
+                return;
             }
 
             currentUserRole = role;
@@ -419,11 +479,14 @@ document.addEventListener('DOMContentLoaded', () => {
             sessionStorage.setItem('app_role', role);
             sessionStorage.setItem('app_username', username);
             sessionStorage.setItem('app_company_name', companyName);
+            sessionStorage.setItem('app_company_id', companyId);
 
             if (loginModal) loginModal.classList.remove('active');
             updateUserDisplay();
             forceRefreshAll();
             loadCompanyUsersList();
+            loadCompanyStaffForDropdowns();
+            loadDynamicDepartmentsAndEquipment();
         });
     }
 
@@ -542,8 +605,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('btn-logout').addEventListener('click', () => {
-        sessionStorage.removeItem('pure_role');
-        sessionStorage.removeItem('pure_username');
+        sessionStorage.removeItem('app_role');
+        sessionStorage.removeItem('app_username');
+        sessionStorage.removeItem('app_company_id');
+        sessionStorage.removeItem('app_company_name');
         currentUserRole = null;
         currentUsername = null;
         if (loginModal) loginModal.classList.add('active');
@@ -855,7 +920,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // MANAGER AND ADMIN MODE ON ACTIVE TICKETS: EDITABLE DROPDOWN
-        const options = MAINTENANCE_STAFF.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
+        const staffNames = cachedCompanyUsers
+            .filter(u => u.role === 'Operator' || u.role === 'Manager')
+            .map(u => u.email_or_name);
+        const options = staffNames.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
         return `
             <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); max-width: 180px;">
                 <option value="Unassigned" ${assigned === 'Unassigned' ? 'selected' : ''}>-- Assign Staff --</option>
