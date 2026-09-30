@@ -414,6 +414,15 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'static', 'index.html'));
 });
 
+app.get('/privacy', (req, res) => {
+    res.sendFile(path.join(__dirname, 'static', 'privacy.html'));
+});
+
+app.get('/.well-known/assetlinks.json', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.sendFile(path.join(__dirname, 'static', 'assetlinks.json'));
+});
+
 // Wait for Python microservice to be ready, then start Express
 function waitForPythonService(retries = 30, delay = 1000) {
     return new Promise((resolve, reject) => {
