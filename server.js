@@ -440,12 +440,24 @@ function waitForPythonService(retries = 30, delay = 1000) {
 }
 
 async function startServer() {
-    console.log(`⏳ Waiting for Python database service on port ${PY_PORT}...`);
+    console.log(`⏳ Checking Python database service on port ${PY_PORT}...`);
     try {
-        await waitForPythonService();
+        await waitForPythonService(3, 300);
         console.log(`✅ Python database service ready on port ${PY_PORT}`);
     } catch (e) {
-        console.error(`⚠️ Python service not detected: ${e.message}. Starting Express anyway...`);
+        console.log(`⚡ Auto-launching Python database microservice (database_server.py)...`);
+        try {
+            const pyExec = getPythonExecutable();
+            const pyProc = spawn(pyExec, ['database_server.py'], {
+                env: { ...process.env, PORT: String(PORT) },
+                stdio: 'inherit'
+            });
+            pyProc.on('error', (err) => console.error('Failed to spawn Python process:', err));
+            await waitForPythonService(15, 800);
+            console.log(`✅ Python database service started and ready on port ${PY_PORT}`);
+        } catch (err2) {
+            console.error(`⚠️ Python service auto-launch warning: ${err2.message}. Express started.`);
+        }
     }
 
     app.listen(PORT, () => {
