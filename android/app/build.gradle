@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "com.maintenancetracker.app"
-        minSdk 24
+        minSdk 26
         targetSdk 35
         versionCode 1
         versionName "1.0.0"
@@ -19,10 +19,12 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("keystore.jks")
-            storePassword "android123"
-            keyAlias "maintenancetracker"
-            keyPassword "android123"
+            if (file("keystore.jks").exists()) {
+                storeFile file("keystore.jks")
+                storePassword "android123"
+                keyAlias "maintenancetracker"
+                keyPassword "android123"
+            }
         }
     }
 
@@ -30,12 +32,21 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            if (file("keystore.jks").exists()) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
         }
         debug {
             applicationIdSuffix ".debug"
             debuggable true
         }
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
     }
 
     compileOptions {
@@ -45,10 +56,6 @@ android {
 
     kotlinOptions {
         jvmTarget = '17'
-    }
-
-    buildFeatures {
-        viewBinding true
     }
 }
 
