@@ -8,8 +8,8 @@ const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Python microservice port
-const PY_PORT = process.env.PY_PORT || (process.env.PORT ? parseInt(process.env.PORT) - 1000 : 5555);
+// Python microservice port (default 5555 on localhost)
+const PY_PORT = parseInt(process.env.PY_PORT, 10) || 5555;
 
 app.use(cors());
 app.use(express.json());

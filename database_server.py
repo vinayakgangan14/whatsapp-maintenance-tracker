@@ -340,24 +340,15 @@ def run():
     # Initialize database tables ONCE
     database.init_db()
 
-    port = 5555
-    port_env = os.environ.get('PORT')
-    if port_env:
-        try:
-            port = int(port_env) - 1000
-            if port < 1024:
-                port = 5555
-        except ValueError:
-            port = 5555
-
-    server = ThreadingHTTPServer(('0.0.0.0', port), DatabaseHandler)
-    print(f"🐍 Python Database Microservice running on port {port}", flush=True)
+    port = int(os.environ.get('PY_PORT', 5555))
+    server = ThreadingHTTPServer(('127.0.0.1', port), DatabaseHandler)
+    print(f"[DB-Server] Python Database Microservice running on port {port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     server.server_close()
-    print("🐍 Python Database Microservice stopped.")
+    print("[DB-Server] Python Database Microservice stopped.", flush=True)
 
 
 if __name__ == '__main__':

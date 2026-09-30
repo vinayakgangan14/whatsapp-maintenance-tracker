@@ -1015,14 +1015,16 @@ def check_company_has_admin(company_id='default'):
     conn.close()
     return {"has_admin": cnt > 0, "admin_count": cnt}
 
-def add_user(email_or_name, password, role, company_id='default'):
-    if not email_or_name or not password or not role:
-        return False, "Missing required user fields"
-    if role not in ['Operator', 'Manager', 'Admin']:
-        return False, "Invalid user role"
+def add_user(email_or_name, password, role='Admin', company_id='default'):
+    if not email_or_name or not str(email_or_name).strip():
+        return False, "Email or Username is required"
+    if not password or not str(password).strip():
+        return False, "Password is required"
+    if not role or role not in ['Operator', 'Manager', 'Admin']:
+        role = 'Admin'
         
-    email_clean = email_or_name.strip()
-    pwd_clean = password.strip()
+    email_clean = str(email_or_name).strip()
+    pwd_clean = str(password).strip()
     conn = get_db_connection()
     cursor = conn.cursor()
     now_str = datetime.datetime.now().isoformat()
