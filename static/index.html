@@ -40,29 +40,17 @@
                 </select>
             </div>
 
-            <!-- OPERATOR USERNAME GROUP -->
-            <div class="form-group" id="operator-username-group" style="text-align: left; display: none;">
-                <label>Operator / Technician Email or Name</label>
-                <input type="text" id="login-username" placeholder="e.g. john.operator@company.com" value="" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+            <!-- UNIFIED USERNAME GROUP -->
+            <div class="form-group" style="text-align: left;">
+                <label id="username-label">Administrator Email or Username</label>
+                <input type="text" id="login-username" placeholder="e.g. admin@company.com" value="" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #10b981; font-weight:600; border: 1px solid rgba(16,185,129,0.3);">
             </div>
 
-            <!-- MANAGER USERNAME GROUP -->
-            <div class="form-group" id="manager-select-group" style="text-align: left; display: none;">
-                <label>Manager Email or Name</label>
-                <input type="text" id="login-manager-name" placeholder="e.g. manager@company.com" value="" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
-            </div>
-
-            <!-- ADMIN USERNAME GROUP -->
-            <div class="form-group" id="admin-username-group" style="text-align: left; display: block;">
-                <label>Administrator Email or Name</label>
-                <input type="text" id="login-admin-name" placeholder="e.g. admin@company.com" value="" style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #10b981; font-weight:600; border: 1px solid rgba(16,185,129,0.3);">
-            </div>
-
-            <!-- PASSCODE GROUP -->
-            <div class="form-group" id="passcode-group" style="text-align: left; display: block;">
+            <!-- UNIFIED PASSCODE GROUP -->
+            <div class="form-group" style="text-align: left;">
                 <label id="passcode-label">Password</label>
                 <input type="password" id="login-passcode" value="" placeholder="Enter your password..." style="width: 100%; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
-                <small class="text-muted" style="font-size: 0.75rem; display: block; margin-top: 4px;">New companies will set Administrator credentials on first log in.</small>
+                <small class="text-muted" id="login-help-text" style="font-size: 0.75rem; display: block; margin-top: 4px;">New companies will set Administrator credentials on first log in.</small>
             </div>
 
             <button class="btn btn-emerald" id="btn-login-submit" style="width: 100%; padding: 0.85rem; margin-top: 1rem; font-size: 1rem;">Log In to Portal</button>

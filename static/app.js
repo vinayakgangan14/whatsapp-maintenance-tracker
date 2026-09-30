@@ -344,21 +344,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (roleSelect) {
         roleSelect.addEventListener('change', () => {
             const role = roleSelect.value;
-            if (role === 'Admin') {
-                if (operatorGroup) operatorGroup.style.display = 'none';
-                if (managerGroup) managerGroup.style.display = 'none';
-                if (adminGroup) adminGroup.style.display = 'block';
-                if (passcodeGroup) passcodeGroup.style.display = 'block';
-            } else if (role === 'Manager') {
-                if (operatorGroup) operatorGroup.style.display = 'none';
-                if (managerGroup) managerGroup.style.display = 'block';
-                if (adminGroup) adminGroup.style.display = 'none';
-                if (passcodeGroup) passcodeGroup.style.display = 'block';
-            } else {
-                if (operatorGroup) operatorGroup.style.display = 'block';
-                if (managerGroup) managerGroup.style.display = 'none';
-                if (adminGroup) adminGroup.style.display = 'none';
-                if (passcodeGroup) passcodeGroup.style.display = 'none';
+            const userLabel = document.getElementById('username-label');
+            const userInput = document.getElementById('login-username');
+            if (userLabel && userInput) {
+                if (role === 'Admin') {
+                    userLabel.innerText = 'Administrator Email or Username';
+                    userInput.style.borderColor = 'rgba(16,185,129,0.3)';
+                    userInput.style.color = '#10b981';
+                } else if (role === 'Manager') {
+                    userLabel.innerText = 'Manager Email or Username';
+                    userInput.style.borderColor = 'rgba(139,92,246,0.3)';
+                    userInput.style.color = '#a78bfa';
+                } else {
+                    userLabel.innerText = 'Operator Email or Username';
+                    userInput.style.borderColor = 'rgba(255,255,255,0.2)';
+                    userInput.style.color = '#fff';
+                }
             }
         });
     }
@@ -366,22 +367,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (passcodeBtn) {
         passcodeBtn.addEventListener('click', async () => {
             const role = document.getElementById('login-role').value;
-            let username = '';
-            let passcode = '';
 
-            if (role === 'Admin') {
-                const adminNameEl = document.getElementById('login-admin-name');
-                username = (adminNameEl && adminNameEl.value.trim()) ? adminNameEl.value.trim() : '';
-                passcode = document.getElementById('login-passcode').value.trim();
-            } else if (role === 'Manager') {
-                const mgrNameEl = document.getElementById('login-manager-name');
-                username = (mgrNameEl && mgrNameEl.value.trim()) ? mgrNameEl.value.trim() : '';
-                passcode = document.getElementById('login-passcode').value.trim();
-            } else {
-                const opNameEl = document.getElementById('login-username');
-                username = (opNameEl && opNameEl.value.trim()) ? opNameEl.value.trim() : '';
-                passcode = document.getElementById('login-passcode').value.trim();
-            }
+            // Robust username extraction from unified input or fallbacks
+            let username = (
+                document.getElementById('login-username')?.value.trim() ||
+                document.getElementById('login-admin-name')?.value.trim() ||
+                document.getElementById('login-manager-name')?.value.trim() ||
+                ''
+            );
+
+            // Passcode extraction
+            let passcode = (document.getElementById('login-passcode')?.value.trim() || '');
 
             if (!username) {
                 alert('Please enter your Email / Username.');
