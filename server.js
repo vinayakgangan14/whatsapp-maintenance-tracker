@@ -26,12 +26,18 @@ app.use('/static', express.static(path.join(__dirname, 'static')));
  */
 function pyRequest(method, urlPath, bodyObj = null) {
     return new Promise((resolve, reject) => {
+        const bodyStr = bodyObj ? JSON.stringify(bodyObj) : '';
+        const headers = { 'Content-Type': 'application/json' };
+        if (bodyStr && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+            headers['Content-Length'] = Buffer.byteLength(bodyStr);
+        }
+
         const options = {
             hostname: '127.0.0.1',
             port: PY_PORT,
             path: urlPath,
             method: method,
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             timeout: 15000
         };
 
@@ -57,8 +63,8 @@ function pyRequest(method, urlPath, bodyObj = null) {
             reject(new Error('Python service timeout'));
         });
 
-        if (bodyObj) {
-            req.write(JSON.stringify(bodyObj));
+        if (bodyStr) {
+            req.write(bodyStr);
         }
         req.end();
     });
