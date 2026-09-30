@@ -1042,7 +1042,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const statusHtml = renderStatusBadge(item.status);
             const assignedHtml = renderAssignedToColumn(item);
             const actionHtml = renderActionButtons(item);
-            const durationStr = item.status === 'RESOLVED' ? `${item.duration_minutes} mins` : '-';
+            let durationMins = parseInt(item.duration_minutes || 0, 10);
+            if (item.status === 'RESOLVED' && item.start_time && item.end_time && durationMins <= 1) {
+                const sTime = new Date(item.start_time).getTime();
+                const eTime = new Date(item.end_time).getTime();
+                if (!isNaN(sTime) && !isNaN(eTime) && eTime > sTime) {
+                    const calc = Math.round((eTime - sTime) / 60000);
+                    if (calc > 1) durationMins = calc;
+                }
+            }
+            const durationStr = item.status === 'RESOLVED' ? `${durationMins} mins` : '-';
             const endTimeStr = item.end_time ? item.end_time.slice(0, 16).replace('T', ' ') : '-';
 
             return `

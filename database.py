@@ -141,9 +141,37 @@ def delete_from_supabase(table_name, query_params):
         return False, str(e)
 
 
-def patch_supabase_record(table_name, ticket_number, patch_data):
+def parse_dt(dt_val):
+    if not dt_val:
+        return None
+    if isinstance(dt_val, datetime.datetime):
+        dt = dt_val
+    else:
+        s = str(dt_val).strip().replace('Z', '+00:00')
+        dt = datetime.datetime.fromisoformat(s)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+def calculate_duration_minutes(start_val, end_val):
+    if not start_val or not end_val:
+        return 0
+    try:
+        s_dt = parse_dt(start_val)
+        e_dt = parse_dt(end_val)
+        if not s_dt or not e_dt:
+            return 0
+        diff_secs = (e_dt - s_dt).total_seconds()
+        return max(1, int(round(diff_secs / 60.0)))
+    except Exception as e:
+        print(f"[calculate_duration_minutes error] {start_val} -> {end_val}: {e}")
+        return 1
+
+
+def patch_supabase_record(table_name, ticket_number, patch_data, company_id=None):
     """
-    Directly PATCHes an existing record in Supabase REST API by ticket_number.
+    Directly PATCHes an existing record in Supabase REST API by ticket_number and optionally company_id.
     """
     supabase_url = (
         os.getenv("SUPABASE_URL") or
@@ -162,7 +190,11 @@ def patch_supabase_record(table_name, ticket_number, patch_data):
 
     try:
         tn = str(ticket_number).strip()
-        patch_url = f"{supabase_url}/rest/v1/{table_name}?ticket_number=eq.{urllib.parse.quote(tn)}"
+        qs = f"ticket_number=eq.{urllib.parse.quote(tn)}"
+        if company_id:
+            cid = format_supabase_company_id(company_id)
+            qs += f"&company_id=eq.{cid}"
+        patch_url = f"{supabase_url}/rest/v1/{table_name}?{qs}"
         data_bytes = json.dumps(patch_data).encode("utf-8")
         req = urllib.request.Request(patch_url, data=data_bytes, method="PATCH")
         req.add_header("apikey", supabase_key)
@@ -548,19 +580,13 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         conn.close()
         return None, f"No active open ticket found for ticket '{ticket_number or equipment_id}'."
 
-    end_dt = datetime.datetime.now()
+    end_dt = datetime.datetime.now(datetime.timezone.utc)
     end_iso = end_dt.isoformat()
     rec_dict = dict(record)
+    comp_id = rec_dict.get('company_id') or company_id
 
     if target_table == "breakdowns":
-        try:
-            start_str = str(rec_dict.get('start_time', '')).strip().replace(' ', 'T')
-            if len(start_str) > 19 and '.' not in start_str and '+' not in start_str and 'Z' not in start_str:
-                start_str = start_str[:19]
-            start_dt = datetime.datetime.fromisoformat(start_str)
-            duration_mins = max(1, int((end_dt - start_dt).total_seconds() / 60))
-        except Exception:
-            duration_mins = 1
+        duration_mins = calculate_duration_minutes(rec_dict.get('start_time'), end_dt)
 
         rec_id = rec_dict.get('id')
         rec_tn = rec_dict.get('ticket_number')
@@ -600,7 +626,7 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
             "duration_minutes": duration_mins,
             "resolution_notes": resolution_notes,
             "technician": technician or rec_dict.get('sender_name') or 'Technician'
-        })
+        }, company_id=comp_id)
         return rec_dict, None
 
     elif target_table == "maintenance_logs":
@@ -628,7 +654,7 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         patch_supabase_record("maintenance_logs", rec_tn, {
             "status": "RESOLVED",
             "technician": technician or rec_dict.get('technician') or 'Technician'
-        })
+        }, company_id=comp_id)
         return rec_dict, None
 
     elif target_table == "welding_logs":
@@ -656,7 +682,7 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         patch_supabase_record("welding_logs", rec_tn, {
             "status": "RESOLVED",
             "technician": technician or rec_dict.get('sender_name') or 'Welder'
-        })
+        }, company_id=comp_id)
         return rec_dict, None
 
 def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
@@ -791,16 +817,26 @@ def get_open_welding():
 def get_all_breakdowns(limit=100, company_id=None):
     sp_data = fetch_from_supabase("breakdowns", limit=limit, company_id=company_id)
     if sp_data:
-        return sp_data
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    if company_id:
-        cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
-        cursor.execute("SELECT * FROM breakdowns WHERE company_id = ? ORDER BY id DESC LIMIT ?", (cid, limit))
+        rows = sp_data
     else:
-        cursor.execute("SELECT * FROM breakdowns ORDER BY id DESC LIMIT ?", (limit,))
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if company_id:
+            cid = "00000000-0000-0000-0000-000000000000" if company_id == "default" else company_id
+            cursor.execute("SELECT * FROM breakdowns WHERE company_id = ? ORDER BY id DESC LIMIT ?", (cid, limit))
+        else:
+            cursor.execute("SELECT * FROM breakdowns ORDER BY id DESC LIMIT ?", (limit,))
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+    # Self-healing: ensure any resolved ticket has true downtime calculated
+    for r in rows:
+        if r.get('status') == 'RESOLVED' and r.get('start_time') and r.get('end_time'):
+            curr_dm = int(r.get('duration_minutes') or 0)
+            if curr_dm <= 1:
+                calc_dm = calculate_duration_minutes(r['start_time'], r['end_time'])
+                if calc_dm > 1:
+                    r['duration_minutes'] = calc_dm
     return rows
 
 def get_all_maintenance(limit=100, company_id=None):
