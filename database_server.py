@@ -249,9 +249,11 @@ class DatabaseHandler(BaseHTTPRequestHandler):
                     return self._send_json({"success": False, "error": err or "Invalid credentials"})
 
             elif path == '/api/auth/register-admin':
+                email_val = data.get('email_or_name') or data.get('username') or data.get('email') or ''
+                pwd_val = data.get('password') or data.get('passcode') or ''
                 user, err = database.add_user(
-                    email_or_name=data.get('email_or_name', ''),
-                    password=data.get('password', ''),
+                    email_or_name=email_val,
+                    password=pwd_val,
                     role='Admin',
                     company_id=cid
                 )
@@ -261,10 +263,13 @@ class DatabaseHandler(BaseHTTPRequestHandler):
                     return self._send_json({"success": False, "error": err or "Registration failed"})
 
             elif path == '/api/users':
+                email_val = data.get('email_or_name') or data.get('username') or data.get('email') or ''
+                pwd_val = data.get('password') or data.get('passcode') or ''
+                role_val = data.get('role', 'Operator')
                 user, err = database.add_user(
-                    email_or_name=data.get('email_or_name', ''),
-                    password=data.get('password', ''),
-                    role=data.get('role', 'Operator'),
+                    email_or_name=email_val,
+                    password=pwd_val,
+                    role=role_val,
                     company_id=cid
                 )
                 if user:

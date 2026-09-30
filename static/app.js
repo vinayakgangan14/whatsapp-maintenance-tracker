@@ -424,7 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             const regRes = await fetch('/api/auth/register-admin', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ email_or_name: username, password: passcode, company_id: companyId })
+                                body: JSON.stringify({
+                                    email_or_name: username,
+                                    username: username,
+                                    password: passcode,
+                                    passcode: passcode,
+                                    company_id: companyId
+                                })
                             });
                             const regData = await regRes.json();
                             if (regData && regData.success) {
@@ -453,7 +459,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const authRes = await fetch('/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password: passcode, role, company_id: companyId })
+                    body: JSON.stringify({
+                        email_or_name: username,
+                        username: username,
+                        password: passcode,
+                        passcode: passcode,
+                        role: role,
+                        company_id: companyId
+                    })
                 });
                 const authData = await authRes.json();
 
