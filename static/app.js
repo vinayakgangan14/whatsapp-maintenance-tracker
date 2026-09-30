@@ -975,10 +975,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const staffNames = cachedCompanyUsers
             .filter(u => u.role === 'Operator' || u.role === 'Manager')
             .map(u => u.email_or_name);
+        const hasAssigned = staffNames.includes(assigned);
+        const extraOption = (!hasAssigned && assigned !== 'Unassigned') ? `<option value="${assigned}" selected>${assigned}</option>` : '';
         const options = staffNames.map(s => `<option value="${s}" ${s === assigned ? 'selected' : ''}>${s}</option>`).join('');
         return `
             <select class="form-control btn-assign-staff" data-ticket="${item.ticket_number}" style="padding: 4px 8px; font-size: 0.8rem; border-radius: 6px; background: rgba(0,0,0,0.5); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); max-width: 180px;">
                 <option value="Unassigned" ${assigned === 'Unassigned' ? 'selected' : ''}>-- Assign Staff --</option>
+                ${extraOption}
                 ${options}
             </select>
         `;
@@ -1061,71 +1064,110 @@ document.addEventListener('DOMContentLoaded', () => {
         bindApprovalEvents();
     }
 
+    // Global Event Delegation for Approve, Reject, Resolve, and Staff Assignment
+    document.addEventListener('click', async (e) => {
+        const approveBtn = e.target.closest('.btn-approve-action');
+        if (approveBtn) {
+            if (approveBtn.disabled) return;
+            approveBtn.disabled = true;
+            approveBtn.textContent = '⏳...';
+
+            const ticket = approveBtn.getAttribute('data-ticket');
+            try {
+                const res = await fetch('/api/ticket/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.ok === false) {
+                    alert('Approval failed: ' + (data.msg || data.error || 'Server error'));
+                    approveBtn.disabled = false;
+                    approveBtn.textContent = 'Approve';
+                    return;
+                }
+                forceRefreshAll();
+            } catch (err) {
+                console.error('Approve error:', err);
+                alert('Network error approving ticket.');
+                approveBtn.disabled = false;
+                approveBtn.textContent = 'Approve';
+            }
+            return;
+        }
+
+        const rejectBtn = e.target.closest('.btn-reject-action');
+        if (rejectBtn) {
+            if (rejectBtn.disabled) return;
+            const ticket = rejectBtn.getAttribute('data-ticket');
+            const reason = prompt(`Reject Ticket ${ticket}?\nEnter rejection reason (optional):`, "");
+            if (reason === null) return;
+
+            rejectBtn.disabled = true;
+            rejectBtn.textContent = '⏳...';
+
+            try {
+                const res = await fetch('/api/ticket/reject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || 'Rejected by Manager' })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.ok === false) {
+                    alert('Rejection failed: ' + (data.msg || data.error || 'Server error'));
+                    rejectBtn.disabled = false;
+                    rejectBtn.textContent = 'Reject';
+                    return;
+                }
+                forceRefreshAll();
+            } catch (err) {
+                console.error('Reject error:', err);
+                alert('Network error rejecting ticket.');
+                rejectBtn.disabled = false;
+                rejectBtn.textContent = 'Reject';
+            }
+            return;
+        }
+
+        const resolveBtn = e.target.closest('.btn-resolve-action');
+        if (resolveBtn) {
+            const ticket = resolveBtn.getAttribute('data-ticket');
+            const eq = resolveBtn.getAttribute('data-eq');
+            openResolveModal(ticket, eq);
+            return;
+        }
+    });
+
+    document.addEventListener('change', async (e) => {
+        const assignSelect = e.target.closest('.btn-assign-staff');
+        if (assignSelect) {
+            const ticket = assignSelect.getAttribute('data-ticket');
+            const assignedTo = assignSelect.value;
+            assignSelect.disabled = true;
+            try {
+                const res = await fetch('/api/ticket/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticket_number: ticket, assigned_to: assignedTo })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.ok === false) {
+                    alert('Staff assignment failed: ' + (data.msg || data.error || 'Server error'));
+                    assignSelect.disabled = false;
+                    return;
+                }
+                isInteractingWithDropdown = false;
+                forceRefreshAll();
+            } catch (err) {
+                console.error('Assign error:', err);
+                alert('Network error assigning staff.');
+                assignSelect.disabled = false;
+            }
+        }
+    });
+
     function bindApprovalEvents() {
-        document.querySelectorAll('.btn-resolve-action').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const ticket = e.target.getAttribute('data-ticket');
-                const eq = e.target.getAttribute('data-eq');
-                openResolveModal(ticket, eq);
-            });
-        });
-
-        document.querySelectorAll('.btn-approve-action').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const actionBtn = e.target;
-                if (actionBtn.disabled) return;
-                actionBtn.disabled = true;
-                actionBtn.textContent = '⏳...';
-
-                const ticket = actionBtn.getAttribute('data-ticket');
-                try {
-                    await fetch('/api/ticket/approve', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername })
-                    });
-                    forceRefreshAll();
-                } catch (err) { console.error(err); }
-            });
-        });
-
-        document.querySelectorAll('.btn-reject-action').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const actionBtn = e.target;
-                if (actionBtn.disabled) return;
-                
-                const ticket = actionBtn.getAttribute('data-ticket');
-                const reason = prompt(`Reject Ticket ${ticket}?\nEnter rejection reason (optional):`, "");
-                if (reason === null) return;
-
-                actionBtn.disabled = true;
-                actionBtn.textContent = '⏳...';
-
-                try {
-                    await fetch('/api/ticket/reject', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticket_number: ticket, manager_name: currentUsername, reason: reason || 'Rejected by Manager' })
-                    });
-                    forceRefreshAll();
-                } catch (err) { console.error(err); }
-            });
-        });
-
-        document.querySelectorAll('.btn-assign-staff').forEach(select => {
-            select.addEventListener('change', async (e) => {
-                const ticket = e.target.getAttribute('data-ticket');
-                const assignedTo = e.target.value;
-                try {
-                    await fetch('/api/ticket/assign', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticket_number: ticket, assigned_to: assignedTo })
-                    });
-                    forceRefreshAll();
-                } catch (err) { console.error(err); }
-            });
-        });
+        // Event delegation handles all table action buttons cleanly
     }
 
     document.getElementById('table-search').addEventListener('input', () => loadBreakdowns());

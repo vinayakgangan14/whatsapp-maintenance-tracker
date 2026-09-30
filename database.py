@@ -141,6 +141,41 @@ def delete_from_supabase(table_name, query_params):
         return False, str(e)
 
 
+def patch_supabase_record(table_name, ticket_number, patch_data):
+    """
+    Directly PATCHes an existing record in Supabase REST API by ticket_number.
+    """
+    supabase_url = (
+        os.getenv("SUPABASE_URL") or
+        get_setting("SUPABASE_URL", "") or
+        DEFAULT_CONFIG.get("SUPABASE_URL", "")
+    ).rstrip("/")
+    supabase_key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY") or
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("SUPABASE_KEY") or
+        get_setting("SUPABASE_ANON_KEY", "") or
+        DEFAULT_CONFIG.get("SUPABASE_ANON_KEY", "")
+    )
+    if not supabase_url or not supabase_key:
+        return False, "Supabase environment variables not configured"
+
+    try:
+        tn = str(ticket_number).strip()
+        patch_url = f"{supabase_url}/rest/v1/{table_name}?ticket_number=eq.{urllib.parse.quote(tn)}"
+        data_bytes = json.dumps(patch_data).encode("utf-8")
+        req = urllib.request.Request(patch_url, data=data_bytes, method="PATCH")
+        req.add_header("apikey", supabase_key)
+        req.add_header("Authorization", f"Bearer {supabase_key}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "return=representation")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return True, resp.read().decode("utf-8")
+    except Exception as e:
+        print(f"[Supabase PATCH Error] Table '{table_name}' Ticket '{ticket_number}': {e}")
+        return False, str(e)
+
+
 def fetch_from_supabase(table_name, select="*", order="id.desc", limit=100, company_id=None):
     """
     Fetches records directly from Supabase REST API as primary source of truth.
@@ -559,6 +594,13 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         rec_dict['resolution_notes'] = resolution_notes
         rec_dict['technician'] = technician or rec_dict.get('sender_name') or 'Technician'
         sync_to_supabase("breakdowns", rec_dict)
+        patch_supabase_record("breakdowns", rec_tn, {
+            "status": "RESOLVED",
+            "end_time": end_iso,
+            "duration_minutes": duration_mins,
+            "resolution_notes": resolution_notes,
+            "technician": technician or rec_dict.get('sender_name') or 'Technician'
+        })
         return rec_dict, None
 
     elif target_table == "maintenance_logs":
@@ -583,6 +625,10 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         rec_dict['status'] = 'RESOLVED'
         rec_dict['technician'] = technician or rec_dict.get('technician') or 'Technician'
         sync_to_supabase("maintenance_logs", rec_dict)
+        patch_supabase_record("maintenance_logs", rec_tn, {
+            "status": "RESOLVED",
+            "technician": technician or rec_dict.get('technician') or 'Technician'
+        })
         return rec_dict, None
 
     elif target_table == "welding_logs":
@@ -607,6 +653,10 @@ def resolve_breakdown(equipment_id=None, ticket_number=None, resolution_notes=""
         rec_dict['status'] = 'RESOLVED'
         rec_dict['technician'] = technician or rec_dict.get('sender_name') or 'Welder'
         sync_to_supabase("welding_logs", rec_dict)
+        patch_supabase_record("welding_logs", rec_tn, {
+            "status": "RESOLVED",
+            "technician": technician or rec_dict.get('sender_name') or 'Welder'
+        })
         return rec_dict, None
 
 def log_maintenance(department, equipment_id, activity_description, scheduled_time="", technician="", sender_phone="", sender_name="", assigned_to="Unassigned", company_id="default"):
@@ -668,12 +718,11 @@ def assign_ticket(ticket_number, assigned_to_name):
         table = "welding_logs"
         
     conn.commit()
-    if table:
-        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
-        row = cursor.fetchone()
-        if row:
-            sync_to_supabase(table, dict(row))
     conn.close()
+
+    # Always update Supabase directly
+    if table:
+        patch_supabase_record(table, ticket_number, {"assigned_to": assigned_to_name})
     return True, f"Ticket {ticket_number} assigned to {assigned_to_name}."
 
 def approve_ticket(ticket_number, manager_name="Maintenance Manager"):
@@ -691,12 +740,11 @@ def approve_ticket(ticket_number, manager_name="Maintenance Manager"):
         table = "welding_logs"
         
     conn.commit()
-    if table:
-        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
-        row = cursor.fetchone()
-        if row:
-            sync_to_supabase(table, dict(row))
     conn.close()
+
+    # Always update Supabase directly
+    if table:
+        patch_supabase_record(table, ticket_number, {"status": "APPROVED"})
     return True, "Ticket approved successfully."
 
 def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
@@ -704,9 +752,11 @@ def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
     cursor = conn.cursor()
     table = None
     note = f"Rejected by {manager_name}" + (f": {reason}" if reason else "")
+    patch_data = {"status": "REJECTED"}
     if ticket_number.startswith("BD-"):
         cursor.execute("UPDATE breakdowns SET status = 'REJECTED', resolution_notes = ? WHERE ticket_number = ?", (note, ticket_number))
         table = "breakdowns"
+        patch_data["resolution_notes"] = note
     elif ticket_number.startswith("PM-"):
         cursor.execute("UPDATE maintenance_logs SET status = 'REJECTED', activity_description = activity_description || ? WHERE ticket_number = ?", (f" [{note}]", ticket_number))
         table = "maintenance_logs"
@@ -715,12 +765,11 @@ def reject_ticket(ticket_number, manager_name="Maintenance Manager", reason=""):
         table = "welding_logs"
         
     conn.commit()
-    if table:
-        cursor.execute(f"SELECT * FROM {table} WHERE ticket_number = ?", (ticket_number,))
-        row = cursor.fetchone()
-        if row:
-            sync_to_supabase(table, dict(row))
     conn.close()
+
+    # Always update Supabase directly
+    if table:
+        patch_supabase_record(table, ticket_number, patch_data)
     return True, "Ticket rejected."
 
 def get_open_breakdowns():
