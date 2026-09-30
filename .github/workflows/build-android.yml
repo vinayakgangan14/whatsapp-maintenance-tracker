@@ -35,11 +35,13 @@ jobs:
         run: |
           keytool -genkeypair -v -keystore keystore.jks -alias maintenancetracker -keyalg RSA -keysize 2048 -validity 10000 -storepass android123 -keypass android123 -dname "CN=Maintenance Tracker, OU=Engineering, O=Apex, L=Plant, ST=State, C=IN"
 
-      - name: Grant Execute Permissions for gradlew
+      - name: Verify Gradle Setup
         working-directory: android
         run: |
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
+          ls -la gradle/wrapper/
+          ./gradlew -v
 
       - name: Build Google Play Store Bundle (AAB)
         working-directory: android
@@ -64,3 +66,20 @@ jobs:
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      - name: Create GitHub Release with AAB and APK
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-build-${{ github.run_number }}
+          name: Maintenance Tracker App v1.0.0 (Build ${{ github.run_number }})
+          body: |
+            ### 🚀 Maintenance Tracker Mobile App Release
+            - **Google Play Store Bundle**: `app-release.aab` (Upload this directly to Google Play Console)
+            - **Direct Install APK**: `app-release.apk` (Install directly on Android phones for testing)
+            - **Target SDK**: 35 (Android 15)
+            - **Package**: `com.maintenancetracker.app`
+          files: |
+            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/debug/app-debug.apk
