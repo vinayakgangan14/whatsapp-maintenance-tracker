@@ -324,6 +324,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 select.value = currentVal;
             }
         });
+
+        const staffDatalist = document.getElementById('staff-datalist');
+        if (staffDatalist) {
+            staffDatalist.innerHTML = staffNames.map(name => `<option value="${name}">`).join('');
+        }
     }
     loadCompanyStaffForDropdowns();
 
@@ -610,6 +615,44 @@ document.addEventListener('DOMContentLoaded', () => {
         const pageTitleEl = document.getElementById('page-title');
         if (pageTitleEl && companyName) {
             pageTitleEl.innerText = `${companyName} Maintenance Tracking Portal`;
+        }
+
+        // ROLE TAB ACCESS RESTRICTIONS
+        // Admin: All tabs accessible
+        // Manager: Overview, Breakdowns, PM, Welding, Plant & Equipment Setup
+        // Operator: Overview, Breakdowns, PM, Welding
+        const navPlant = document.querySelector('[data-tab="tab-plant-config"]');
+        const navSheets = document.querySelector('[data-tab="tab-sheets"]');
+        const navSettings = document.querySelector('[data-tab="tab-settings"]');
+
+        if (currentUserRole === 'Admin') {
+            if (navPlant) navPlant.style.display = '';
+            if (navSheets) navSheets.style.display = '';
+            if (navSettings) navSettings.style.display = '';
+        } else if (currentUserRole === 'Manager') {
+            if (navPlant) navPlant.style.display = '';
+            if (navSheets) navSheets.style.display = 'none';
+            if (navSettings) navSettings.style.display = 'none';
+        } else { // Operator
+            if (navPlant) navPlant.style.display = 'none';
+            if (navSheets) navSheets.style.display = 'none';
+            if (navSettings) navSettings.style.display = 'none';
+        }
+
+        // If currently on a tab that is now hidden, switch back to Overview tab
+        const currentActivePane = document.querySelector('.tab-pane.active');
+        if (currentActivePane) {
+            const activeId = currentActivePane.id;
+            const isRestrictedForManager = (currentUserRole === 'Manager' && (activeId === 'tab-sheets' || activeId === 'tab-settings'));
+            const isRestrictedForOperator = (currentUserRole === 'Operator' && (activeId === 'tab-plant-config' || activeId === 'tab-sheets' || activeId === 'tab-settings'));
+            if (isRestrictedForManager || isRestrictedForOperator) {
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+                const overviewPane = document.getElementById('tab-overview');
+                const overviewNav = document.querySelector('[data-tab="tab-overview"]');
+                if (overviewPane) overviewPane.classList.add('active');
+                if (overviewNav) overviewNav.classList.add('active');
+            }
         }
     }
 
@@ -949,19 +992,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<button class="btn btn-sm btn-outline" disabled>Closed</button>`;
         }
 
-        // OPERATOR ROLE: NO RESOLVE/APPROVE RIGHTS!
-        if (currentUserRole === 'Operator') {
-            return `<button class="btn btn-sm btn-outline" disabled style="opacity:0.6;">Manager Only</button>`;
+        // PENDING APPROVAL: Managers and Admins can approve/reject; Operators wait
+        if (isPending) {
+            if (currentUserRole === 'Manager' || currentUserRole === 'Admin') {
+                return `
+                    <button class="btn btn-sm btn-emerald btn-approve-action" data-ticket="${item.ticket_number}" style="margin-right:4px;">Approve</button>
+                    <button class="btn btn-sm btn-outline btn-reject-action" data-ticket="${item.ticket_number}" style="border-color:#ef4444;color:#ef4444;">Reject</button>
+                `;
+            } else {
+                return `<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid #f59e0b; font-size: 0.75rem; padding: 4px 8px;">⏳ Awaiting Mgr</span>`;
+            }
         }
 
-        // MANAGER & ADMIN ROLES: FULL APPROVE, REJECT, AND RESOLVE RIGHTS!
-        if ((currentUserRole === 'Manager' || currentUserRole === 'Admin') && isPending) {
-            return `
-                <button class="btn btn-sm btn-emerald btn-approve-action" data-ticket="${item.ticket_number}" style="margin-right:4px;">Approve</button>
-                <button class="btn btn-sm btn-outline btn-reject-action" data-ticket="${item.ticket_number}" style="border-color:#ef4444;color:#ef4444;">Reject</button>
-            `;
-        }
-
+        // APPROVED / OPEN: Admin, Manager, and Operator can ALL resolve the ticket!
         return `<button class="btn btn-sm btn-emerald btn-resolve-action" data-ticket="${item.ticket_number}" data-eq="${item.equipment_id}">Resolve</button>`;
     }
 

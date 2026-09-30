@@ -132,8 +132,8 @@
                     <a href="/api/export/excel" class="btn btn-outline" id="btn-export-excel">
                         <span>📥 Export Excel</span>
                     </a>
-                    <button class="btn btn-outline" id="btn-logout" style="border-color: rgba(255,255,255,0.2);">
-                        <span>🔒 Switch Role</span>
+                    <button class="btn btn-outline" id="btn-logout" style="border-color: rgba(239, 68, 68, 0.5); color: #f87171; background: rgba(239, 68, 68, 0.1); font-weight: 600;">
+                        <span>🚪 Log Out</span>
                     </button>
                 </div>
             </header>
@@ -463,8 +463,9 @@
                 <textarea id="modal-resolution" rows="3" placeholder="Describe repair actions, parts replaced..."></textarea>
             </div>
             <div class="form-group">
-                <label>Technician Name</label>
-                <input type="text" id="modal-tech" placeholder="e.g. John Doe">
+                <label>Technician / Operator Name</label>
+                <input type="text" id="modal-tech" list="staff-datalist" placeholder="e.g. Select or type technician name...">
+                <datalist id="staff-datalist"></datalist>
             </div>
             <div class="modal-actions">
                 <button class="btn btn-outline" id="btn-close-modal">Cancel</button>
