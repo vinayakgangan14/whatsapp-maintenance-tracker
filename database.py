@@ -48,25 +48,28 @@ def sync_to_supabase(table_name, record_dict):
     try:
         payload = dict(record_dict)
         payload.pop("synced_to_sheets", None)
-        payload.pop("id", None)
         
-        comp = payload.get("company_id")
-        payload["company_id"] = format_supabase_company_id(comp)
+        if table_name == "companies":
+            payload["id"] = format_supabase_company_id(payload.get("id"))
+            payload.pop("company_id", None)
+            patch_query = f"id=eq.{payload['id']}"
+        else:
+            payload.pop("id", None)
+            comp = payload.get("company_id")
+            payload["company_id"] = format_supabase_company_id(comp)
+            
+            # Build query criteria for update (PATCH) check
+            patch_query = None
+            if "ticket_number" in payload and payload["ticket_number"]:
+                patch_query = f"ticket_number=eq.{payload['ticket_number']}"
+            elif table_name == "custom_departments" and "department_name" in payload:
+                patch_query = f"department_name=eq.{urllib.parse.quote(str(payload['department_name']))}&company_id=eq.{payload['company_id']}"
+            elif table_name == "custom_equipment" and "equipment_name" in payload:
+                patch_query = f"equipment_name=eq.{urllib.parse.quote(str(payload['equipment_name']))}&company_id=eq.{payload['company_id']}"
+            elif table_name == "users" and "email_or_name" in payload:
+                patch_query = f"email_or_name=eq.{urllib.parse.quote(str(payload['email_or_name']))}&company_id=eq.{payload['company_id']}"
             
         data_bytes = json.dumps(payload).encode("utf-8")
-        
-        # Build query criteria for update (PATCH) check
-        patch_query = None
-        if "ticket_number" in payload and payload["ticket_number"]:
-            patch_query = f"ticket_number=eq.{payload['ticket_number']}"
-        elif table_name == "custom_departments" and "department_name" in payload:
-            patch_query = f"department_name=eq.{urllib.parse.quote(str(payload['department_name']))}&company_id=eq.{payload['company_id']}"
-        elif table_name == "custom_equipment" and "equipment_name" in payload:
-            patch_query = f"equipment_name=eq.{urllib.parse.quote(str(payload['equipment_name']))}&company_id=eq.{payload['company_id']}"
-        elif table_name == "users" and "email_or_name" in payload:
-            patch_query = f"email_or_name=eq.{urllib.parse.quote(str(payload['email_or_name']))}&company_id=eq.{payload['company_id']}"
-        elif table_name == "companies" and "company_name" in payload:
-            patch_query = f"company_name=eq.{urllib.parse.quote(str(payload['company_name']))}"
 
         # 1. Try POST (insert)
         endpoint = f"{supabase_url}/rest/v1/{table_name}"
@@ -211,6 +214,19 @@ def get_or_create_company(company_name):
         comp_id = row["id"]
         return {"id": comp_id, "company_name": row["company_name"]}
         
+    # Check Supabase if not found in local SQLite (e.g. after server restart)
+    sp_companies = fetch_from_supabase("companies", limit=100)
+    if sp_companies:
+        for sc in sp_companies:
+            if sc.get("company_name", "").strip().lower() == clean_name.lower():
+                comp_id = sc["id"]
+                now_str = sc.get("created_at", datetime.datetime.now().isoformat())
+                cursor.execute("INSERT OR REPLACE INTO companies (id, company_name, industry, created_at) VALUES (?, ?, ?, ?)",
+                               (comp_id, sc["company_name"], sc.get("industry", "Manufacturing"), now_str))
+                conn.commit()
+                conn.close()
+                return {"id": comp_id, "company_name": sc["company_name"]}
+
     comp_id = str(uuid.uuid4())
     now_str = datetime.datetime.now().isoformat()
     
@@ -232,7 +248,7 @@ def sync_all_to_supabase():
     Batch pushes all local SQLite records to Supabase REST API.
     """
     results = {}
-    tables = ["breakdowns", "maintenance_logs", "welding_logs", "custom_departments", "custom_equipment", "users"]
+    tables = ["companies", "breakdowns", "maintenance_logs", "welding_logs", "custom_departments", "custom_equipment", "users"]
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -993,10 +1009,25 @@ def authenticate_user(email_or_name, password, role=None, company_id='default'):
         
     cursor.execute(query, tuple(params))
     user = cursor.fetchone()
-    conn.close()
     
     if user:
+        conn.close()
         return dict(user), None
+
+    # Fallback to Supabase users table if not found locally (e.g. after server restart)
+    sp_users = fetch_from_supabase("users", limit=50, company_id=company_id)
+    if sp_users:
+        clean_email = email_or_name.strip().lower()
+        for su in sp_users:
+            if su.get("email_or_name", "").strip().lower() == clean_email and su.get("password") == password.strip():
+                if not role or su.get("role") == role:
+                    cursor.execute("INSERT OR REPLACE INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                                   (company_id, su["email_or_name"], su["password"], su["role"], su.get("created_at", datetime.datetime.now().isoformat())))
+                    conn.commit()
+                    conn.close()
+                    return {"id": su.get("id", 1), "email_or_name": su["email_or_name"], "role": su["role"]}, None
+
+    conn.close()
     return False, "Invalid email/username or password"
 
 def get_company_users(company_id='default'):
@@ -1004,16 +1035,47 @@ def get_company_users(company_id='default'):
     cursor = conn.cursor()
     cursor.execute("SELECT id, email_or_name, role, created_at FROM users WHERE company_id = ? ORDER BY role ASC, email_or_name ASC", (company_id,))
     rows = cursor.fetchall()
+    
+    if rows:
+        conn.close()
+        return [dict(row) for row in rows]
+        
+    # Fallback to Supabase users table
+    sp_users = fetch_from_supabase("users", limit=100, company_id=company_id)
+    if sp_users:
+        for su in sp_users:
+            cursor.execute("INSERT OR REPLACE INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (company_id, su["email_or_name"], su["password"], su["role"], su.get("created_at", datetime.datetime.now().isoformat())))
+        conn.commit()
+        conn.close()
+        return sp_users
+
     conn.close()
-    return [dict(row) for row in rows]
+    return []
 
 def check_company_has_admin(company_id='default'):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) as cnt FROM users WHERE company_id = ? AND role = 'Admin'", (company_id,))
     cnt = cursor.fetchone()['cnt']
+    if cnt > 0:
+        conn.close()
+        return {"has_admin": True, "admin_count": cnt}
+
+    # Check Supabase
+    sp_users = fetch_from_supabase("users", limit=50, company_id=company_id)
+    if sp_users:
+        sp_admins = [u for u in sp_users if u.get("role") == "Admin"]
+        if sp_admins:
+            for sa in sp_admins:
+                cursor.execute("INSERT OR REPLACE INTO users (company_id, email_or_name, password, role, created_at) VALUES (?, ?, ?, ?, ?)",
+                               (company_id, sa["email_or_name"], sa["password"], sa["role"], sa.get("created_at", datetime.datetime.now().isoformat())))
+            conn.commit()
+            conn.close()
+            return {"has_admin": True, "admin_count": len(sp_admins)}
+
     conn.close()
-    return {"has_admin": cnt > 0, "admin_count": cnt}
+    return {"has_admin": False, "admin_count": 0}
 
 def add_user(email_or_name, password, role='Admin', company_id='default'):
     if not email_or_name or not str(email_or_name).strip():
