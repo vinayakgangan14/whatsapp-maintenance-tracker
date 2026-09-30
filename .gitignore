@@ -6,3 +6,9 @@ service_account.json
 .env
 exports/*.xlsx
 node_modules/
+*.aab
+*.apk
+.gradle/
+build/
+android/.gradle/
+android/app/build/
