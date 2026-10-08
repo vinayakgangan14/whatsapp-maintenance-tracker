@@ -30,10 +30,14 @@ jobs:
       - name: Accept Android SDK Licenses
         run: yes | sdkmanager --licenses || true
 
-      - name: Generate Release Keystore
+      - name: Ensure Release Keystore
         working-directory: android/app
         run: |
-          keytool -genkeypair -v -keystore keystore.jks -alias maintenancetracker -keyalg RSA -keysize 2048 -validity 10000 -storepass android123 -keypass android123 -dname "CN=Maintenance Tracker, OU=Engineering, O=Apex, L=Plant, ST=State, C=IN"
+          if [ ! -f keystore.jks ]; then
+            keytool -genkeypair -v -keystore keystore.jks -alias maintenancetracker -keyalg RSA -keysize 2048 -validity 10000 -storepass android123 -keypass android123 -dname "CN=Maintenance Tracker, OU=Engineering, O=Apex, L=Plant, ST=State, C=IN"
+          fi
+          keytool -list -v -keystore keystore.jks -storepass android123
+
 
       - name: Verify Gradle Setup
         working-directory: android
@@ -83,3 +87,4 @@ jobs:
             android/app/build/outputs/bundle/release/app-release.aab
             android/app/build/outputs/apk/release/app-release.apk
             android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/upload_certificate.pem
