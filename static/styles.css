@@ -561,7 +561,10 @@ body {
 .modal.active { display: flex; }
 .modal-content {
     width: 460px;
-    max-width: 90%;
+    max-width: 94%;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .modal-actions {
@@ -573,6 +576,82 @@ body {
 
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
+
+/* Company Logo Elements */
+.brand-logo-wrapper {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.header-logo-wrapper {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+}
+
+.company-logo-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 2px;
+}
+
+.company-logo-placeholder {
+    font-size: 1.35rem;
+}
+
+.logo-edit-badge {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #0284c7;
+    color: #fff;
+    border: 2px solid #0b0f19;
+    font-size: 0.65rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    transition: transform 0.2s;
+}
+
+.logo-edit-badge:hover {
+    transform: scale(1.15);
+}
+
+.mobile-table-hint {
+    display: none;
+    font-size: 0.74rem;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    padding: 5px 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    text-align: center;
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    font-weight: 500;
+}
 
 /* Mobile Menu Button */
 .mobile-toggle-btn {
@@ -603,7 +682,10 @@ body {
         width: 100%;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
-        padding: 1rem;
+        padding: 0.85rem 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 99;
     }
 
     .brand {
@@ -613,9 +695,11 @@ body {
 
     .nav-menu {
         display: none;
-        margin-top: 1rem;
+        margin-top: 0.75rem;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.4rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     .sidebar.mobile-open .nav-menu {
@@ -624,7 +708,7 @@ body {
 
     .sidebar.mobile-open .server-status {
         display: flex;
-        margin-top: 1rem;
+        margin-top: 0.75rem;
     }
 
     .server-status {
@@ -632,33 +716,25 @@ body {
     }
 
     .main-content {
-        padding: 1.25rem;
+        padding: 1rem 0.85rem;
     }
 
     .top-header {
         flex-direction: column;
-        align-items: flex-start;
-        gap: 1rem;
+        align-items: stretch;
+        gap: 0.85rem;
+        padding: 1rem;
     }
 
     .header-actions {
         width: 100%;
-        justify-content: flex-start;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
     }
 
     .charts-grid {
         grid-template-columns: 1fr;
-    }
-
-    .simulator-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .phone-frame {
-        width: 100%;
-        max-width: 420px;
-        margin: 0 auto;
-        height: 520px;
     }
 
     .form-grid {
@@ -670,40 +746,132 @@ body {
     }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+    .main-content {
+        padding: 0.75rem 0.5rem;
+    }
+
+    .glass-card {
+        padding: 1rem 0.85rem;
+        border-radius: var(--radius-md);
+    }
+
+    .top-header {
+        padding: 0.85rem 0.75rem;
+        border-radius: var(--radius-md);
+    }
+
     .header-title h1 {
-        font-size: 1.3rem;
+        font-size: 1.2rem;
+    }
+
+    .header-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+    }
+
+    .header-actions .btn {
+        width: 100%;
+        justify-content: center;
+        font-size: 0.8rem;
+        padding: 0.55rem 0.4rem;
+        text-align: center;
+    }
+
+    .header-actions #btn-logout {
+        grid-column: span 2;
     }
 
     .kpi-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 0.75rem;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.65rem;
+        margin-bottom: 1.25rem;
     }
 
     .kpi-card {
-        padding: 1rem;
+        padding: 0.85rem;
+        border-radius: var(--radius-md);
     }
 
     .kpi-value {
-        font-size: 1.6rem;
+        font-size: 1.55rem;
+    }
+
+    .kpi-header {
+        font-size: 0.75rem;
+    }
+
+    .kpi-footer {
+        font-size: 0.68rem;
+    }
+
+    .mobile-table-hint {
+        display: block;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .data-table {
+        min-width: 820px;
+        font-size: 0.82rem;
+    }
+
+    .data-table th, .data-table td {
+        padding: 0.65rem 0.75rem;
+        white-space: nowrap;
+    }
+
+    .table-toolbar {
+        flex-direction: column;
+        gap: 0.5rem;
     }
 
     .search-box input {
         width: 100%;
     }
 
-    .table-toolbar {
-        flex-direction: column;
-    }
-
-    .header-actions {
-        flex-direction: column;
+    .filter-group select {
         width: 100%;
     }
 
-    .header-actions .btn {
-        width: 100%;
-        justify-content: center;
+    .chart-container {
+        height: 230px;
     }
 }
+
+@media (max-width: 480px) {
+    .header-title h1 {
+        font-size: 1.1rem;
+    }
+
+    .header-title .subtitle {
+        font-size: 0.72rem;
+    }
+
+    .header-logo-wrapper {
+        width: 38px;
+        height: 38px;
+    }
+
+    .brand-logo-wrapper {
+        width: 36px;
+        height: 36px;
+    }
+
+    .kpi-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .kpi-value {
+        font-size: 1.35rem;
+    }
+}
+
 

@@ -613,9 +613,29 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const companyName = sessionStorage.getItem('app_company_name');
         const pageTitleEl = document.getElementById('page-title');
+        const sidebarCompNameEl = document.getElementById('sidebar-company-name');
         if (pageTitleEl && companyName) {
             pageTitleEl.innerText = `${companyName} Maintenance Tracking Portal`;
         }
+        if (sidebarCompNameEl && companyName) {
+            sidebarCompNameEl.innerText = companyName;
+        }
+
+        // Company branding card access (Admin only)
+        const brandingCard = document.getElementById('card-company-branding');
+        const brandingBadge = document.getElementById('branding-admin-badge');
+        const logoActions = document.getElementById('logo-admin-actions');
+        if (brandingCard) {
+            if (currentUserRole === 'Admin') {
+                brandingCard.style.display = '';
+                if (brandingBadge) brandingBadge.style.display = '';
+                if (logoActions) logoActions.style.display = 'flex';
+            } else {
+                brandingCard.style.display = 'none';
+            }
+        }
+
+        loadCompanyLogo();
 
         // ROLE TAB ACCESS RESTRICTIONS
         // Admin: All tabs accessible
@@ -656,6 +676,228 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ----------------------------------------------------
+    // COMPANY BRANDING & LOGO MANAGEMENT
+    // ----------------------------------------------------
+    function updateCompanyLogoDisplay(logoUrl) {
+        const sidebarImg = document.getElementById('sidebar-company-logo');
+        const sidebarPlaceholder = document.getElementById('sidebar-logo-placeholder');
+        const headerImg = document.getElementById('header-company-logo');
+        const headerPlaceholder = document.getElementById('header-logo-placeholder');
+        const settingsPreview = document.getElementById('settings-logo-preview');
+        const settingsPlaceholder = document.getElementById('settings-logo-placeholder');
+        const quickEditBtn = document.getElementById('btn-quick-edit-logo');
+
+        const hasLogo = Boolean(logoUrl && logoUrl.trim());
+
+        if (sidebarImg && sidebarPlaceholder) {
+            if (hasLogo) {
+                sidebarImg.src = logoUrl;
+                sidebarImg.style.display = 'block';
+                sidebarPlaceholder.style.display = 'none';
+            } else {
+                sidebarImg.style.display = 'none';
+                sidebarPlaceholder.style.display = 'inline';
+            }
+        }
+
+        if (headerImg && headerPlaceholder) {
+            if (hasLogo) {
+                headerImg.src = logoUrl;
+                headerImg.style.display = 'block';
+                headerPlaceholder.style.display = 'none';
+            } else {
+                headerImg.style.display = 'none';
+                headerPlaceholder.style.display = 'inline';
+            }
+        }
+
+        if (settingsPreview && settingsPlaceholder) {
+            if (hasLogo) {
+                settingsPreview.src = logoUrl;
+                settingsPreview.style.display = 'block';
+                settingsPlaceholder.style.display = 'none';
+            } else {
+                settingsPreview.style.display = 'none';
+                settingsPlaceholder.style.display = 'inline';
+            }
+        }
+
+        if (quickEditBtn) {
+            quickEditBtn.style.display = (currentUserRole === 'Admin') ? 'flex' : 'none';
+        }
+    }
+
+    async function loadCompanyLogo() {
+        const cid = getCompanyId();
+        if (!cid) return;
+
+        // Instant local cache display
+        const cachedLogo = localStorage.getItem(`company_logo_${cid}`);
+        if (cachedLogo) {
+            updateCompanyLogoDisplay(cachedLogo);
+        }
+
+        try {
+            const res = await fetch(`/api/company/logo?company_id=${encodeURIComponent(cid)}`);
+            const data = await res.json();
+            if (data && data.logo_url) {
+                localStorage.setItem(`company_logo_${cid}`, data.logo_url);
+                updateCompanyLogoDisplay(data.logo_url);
+            } else if (data && data.logo_url === "") {
+                localStorage.removeItem(`company_logo_${cid}`);
+                updateCompanyLogoDisplay("");
+            }
+        } catch (e) {
+            console.error('[Logo Fetch Error]', e);
+        }
+    }
+
+    function compressAndResizeImage(file, maxDimension = 400) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (readerEvent) => {
+                const img = new Image();
+                img.onload = () => {
+                    let width = img.width;
+                    let height = img.height;
+                    if (width > height) {
+                        if (width > maxDimension) {
+                            height = Math.round((height * maxDimension) / width);
+                            width = maxDimension;
+                        }
+                    } else {
+                        if (height > maxDimension) {
+                            width = Math.round((width * maxDimension) / height);
+                            height = maxDimension;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    const compressedDataUrl = canvas.toDataURL('image/png', 0.9);
+                    resolve(compressedDataUrl);
+                };
+                img.onerror = reject;
+                img.src = readerEvent.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function setupLogoUploadListeners() {
+        const fileInput = document.getElementById('company-logo-input');
+        const uploadBtn = document.getElementById('btn-upload-logo-gallery');
+        const quickEditBtn = document.getElementById('btn-quick-edit-logo');
+        const removeBtn = document.getElementById('btn-remove-logo');
+        const statusEl = document.getElementById('logo-upload-status');
+
+        if (uploadBtn && fileInput) {
+            uploadBtn.addEventListener('click', () => {
+                if (currentUserRole !== 'Admin') {
+                    alert('Only Administrators can change company branding.');
+                    return;
+                }
+                fileInput.click();
+            });
+        }
+
+        if (quickEditBtn && fileInput) {
+            quickEditBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (currentUserRole !== 'Admin') return;
+                fileInput.click();
+            });
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                if (!file.type.startsWith('image/')) {
+                    alert('Please select an image file (PNG, JPG, WebP).');
+                    return;
+                }
+
+                if (statusEl) {
+                    statusEl.style.color = '#38bdf8';
+                    statusEl.innerText = '⏳ Optimizing and uploading logo from gallery...';
+                }
+
+                try {
+                    const compressedDataUrl = await compressAndResizeImage(file, 400);
+                    const cid = getCompanyId();
+
+                    // Instantly update UI for snappy feedback
+                    updateCompanyLogoDisplay(compressedDataUrl);
+
+                    const res = await fetch('/api/company/logo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            company_id: cid,
+                            logo_data: compressedDataUrl
+                        })
+                    });
+
+                    const data = await res.json();
+                    if (data.success) {
+                        const finalUrl = data.logo_url || compressedDataUrl;
+                        localStorage.setItem(`company_logo_${cid}`, finalUrl);
+                        updateCompanyLogoDisplay(finalUrl);
+                        if (statusEl) {
+                            statusEl.style.color = '#10b981';
+                            statusEl.innerText = '✅ Company logo updated from gallery!';
+                            setTimeout(() => { if (statusEl) statusEl.innerText = ''; }, 4000);
+                        }
+                    } else {
+                        throw new Error(data.error || 'Server error saving logo');
+                    }
+                } catch (err) {
+                    console.error('[Upload Logo Error]', err);
+                    if (statusEl) {
+                        statusEl.style.color = '#f87171';
+                        statusEl.innerText = `❌ Error: ${err.message}`;
+                    }
+                } finally {
+                    fileInput.value = '';
+                }
+            });
+        }
+
+        if (removeBtn) {
+            removeBtn.addEventListener('click', async () => {
+                if (currentUserRole !== 'Admin') {
+                    alert('Only Administrators can remove company branding.');
+                    return;
+                }
+                if (!confirm('Are you sure you want to remove the custom company logo?')) return;
+
+                const cid = getCompanyId();
+                try {
+                    await fetch('/api/company/logo', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ company_id: cid, logo_data: "" })
+                    });
+                    localStorage.removeItem(`company_logo_${cid}`);
+                    updateCompanyLogoDisplay("");
+                    if (statusEl) {
+                        statusEl.style.color = '#10b981';
+                        statusEl.innerText = '✅ Logo removed. Default icon restored.';
+                        setTimeout(() => { if (statusEl) statusEl.innerText = ''; }, 3000);
+                    }
+                } catch (err) {
+                    alert('Error removing logo: ' + err.message);
+                }
+            });
+        }
+    }
+
     document.getElementById('btn-logout').addEventListener('click', () => {
         sessionStorage.removeItem('app_role');
         sessionStorage.removeItem('app_username');
@@ -663,10 +905,12 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionStorage.removeItem('app_company_name');
         currentUserRole = null;
         currentUsername = null;
+        updateCompanyLogoDisplay("");
         if (loginModal) loginModal.classList.add('active');
     });
 
     updateUserDisplay();
+    setupLogoUploadListeners();
 
     // ----------------------------------------------------
     // MOBILE NAVIGATION TOGGLE

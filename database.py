@@ -269,17 +269,23 @@ def get_or_create_company(company_name):
             id TEXT PRIMARY KEY,
             company_name TEXT UNIQUE NOT NULL,
             industry TEXT DEFAULT 'Manufacturing',
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            logo_url TEXT
         )
     ''')
     conn.commit()
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN logo_url TEXT")
+        conn.commit()
+    except Exception:
+        pass
     
-    cursor.execute("SELECT id, company_name FROM companies WHERE LOWER(company_name) = LOWER(?)", (clean_name,))
+    cursor.execute("SELECT id, company_name, logo_url FROM companies WHERE LOWER(company_name) = LOWER(?)", (clean_name,))
     row = cursor.fetchone()
     if row:
         conn.close()
         comp_id = row["id"]
-        return {"id": comp_id, "company_name": row["company_name"]}
+        return {"id": comp_id, "company_name": row["company_name"], "logo_url": row["logo_url"] or ""}
         
     # Check Supabase if not found in local SQLite (e.g. after server restart)
     sp_companies = fetch_from_supabase("companies", limit=100)
@@ -288,26 +294,79 @@ def get_or_create_company(company_name):
             if sc.get("company_name", "").strip().lower() == clean_name.lower():
                 comp_id = sc["id"]
                 now_str = sc.get("created_at", datetime.datetime.now().isoformat())
-                cursor.execute("INSERT OR REPLACE INTO companies (id, company_name, industry, created_at) VALUES (?, ?, ?, ?)",
-                               (comp_id, sc["company_name"], sc.get("industry", "Manufacturing"), now_str))
+                logo_val = sc.get("logo_url", "")
+                cursor.execute("INSERT OR REPLACE INTO companies (id, company_name, industry, created_at, logo_url) VALUES (?, ?, ?, ?, ?)",
+                               (comp_id, sc["company_name"], sc.get("industry", "Manufacturing"), now_str, logo_val))
                 conn.commit()
                 conn.close()
-                return {"id": comp_id, "company_name": sc["company_name"]}
+                return {"id": comp_id, "company_name": sc["company_name"], "logo_url": logo_val}
 
     comp_id = str(uuid.uuid4())
     now_str = datetime.datetime.now().isoformat()
     
     try:
-        cursor.execute("INSERT INTO companies (id, company_name, industry, created_at) VALUES (?, ?, 'Manufacturing', ?)",
+        cursor.execute("INSERT INTO companies (id, company_name, industry, created_at, logo_url) VALUES (?, ?, 'Manufacturing', ?, '')",
                        (comp_id, clean_name, now_str))
         conn.commit()
         conn.close()
-        comp_dict = {"id": comp_id, "company_name": clean_name, "industry": "Manufacturing", "created_at": now_str}
+        comp_dict = {"id": comp_id, "company_name": clean_name, "industry": "Manufacturing", "created_at": now_str, "logo_url": ""}
         sync_to_supabase("companies", comp_dict)
         return comp_dict
     except Exception as e:
         conn.close()
-        return {"id": "00000000-0000-0000-0000-000000000000", "company_name": clean_name}
+        return {"id": "00000000-0000-0000-0000-000000000000", "company_name": clean_name, "logo_url": ""}
+
+
+def update_company_logo(company_id, logo_url):
+    """
+    Updates the company's logo URL in SQLite and syncs to Supabase.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN logo_url TEXT")
+        conn.commit()
+    except Exception:
+        pass
+    cursor.execute("UPDATE companies SET logo_url = ? WHERE id = ?", (logo_url, company_id))
+    conn.commit()
+    conn.close()
+    
+    try:
+        sync_to_supabase("companies", {"id": company_id, "logo_url": logo_url})
+    except Exception as e:
+        print(f"[Supabase Logo Sync Error] {e}")
+    return True
+
+
+def get_company_logo(company_id):
+    """
+    Retrieves the company's logo URL from SQLite or Supabase.
+    """
+    if not company_id:
+        return ""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN logo_url TEXT")
+        conn.commit()
+    except Exception:
+        pass
+    cursor.execute("SELECT logo_url FROM companies WHERE id = ?", (company_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["logo_url"]:
+        return row["logo_url"]
+        
+    try:
+        sp_companies = fetch_from_supabase("companies", limit=100)
+        if sp_companies:
+            for sc in sp_companies:
+                if sc.get("id") == company_id and sc.get("logo_url"):
+                    return sc["logo_url"]
+    except Exception:
+        pass
+    return ""
 
 
 def sync_all_to_supabase():
@@ -483,6 +542,21 @@ def init_db():
             UNIQUE(company_id, email_or_name)
         )
     ''')
+
+    # Companies Table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS companies (
+            id TEXT PRIMARY KEY,
+            company_name TEXT UNIQUE NOT NULL,
+            industry TEXT DEFAULT 'Manufacturing',
+            created_at TEXT NOT NULL,
+            logo_url TEXT
+        )
+    ''')
+    try:
+        cursor.execute("ALTER TABLE companies ADD COLUMN logo_url TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
     conn.close()

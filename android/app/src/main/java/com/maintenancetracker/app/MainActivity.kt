@@ -1,4 +1,4 @@
-﻿package com.maintenancetracker.app
+package com.maintenancetracker.app
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -88,9 +88,11 @@ class MainActivity : AppCompatActivity() {
         settings.databaseEnabled = true
         settings.allowFileAccess = true
         settings.useWideViewPort = true
-        settings.loadWithOverviewMode = true
+        settings.loadWithOverviewMode = false
+        settings.textZoom = 100
         settings.setSupportZoom(true)
-        settings.builtInZoomControls = false
+        settings.builtInZoomControls = true
+        settings.displayZoomControls = false
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
         webView.webViewClient = object : WebViewClient() {

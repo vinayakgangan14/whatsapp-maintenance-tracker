@@ -12,8 +12,8 @@ const PORT = process.env.PORT || 3000;
 const PY_PORT = parseInt(process.env.PY_PORT, 10) || 5555;
 
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use('/static', express.static(path.join(__dirname, 'static')));
 
 // ----------------------------------------------------------------
@@ -168,6 +168,14 @@ app.get('/api/companies/check-admin', async (req, res) => {
     } catch (e) { res.json({ has_admin: false, admin_count: 0 }); }
 });
 
+app.get('/api/company/logo', async (req, res) => {
+    try {
+        const data = await pyGet('/api/company/logo', { company_id: req.query.company_id });
+        res.json(data || { logo_url: "" });
+    } catch (e) { res.json({ logo_url: "" }); }
+});
+
+
 // ----------------------------------------------------------------
 // POST ENDPOINTS — Proxy to Python microservice
 // ----------------------------------------------------------------
@@ -269,6 +277,40 @@ app.post('/api/companies/register', async (req, res) => {
         res.json(body);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
+
+app.post('/api/company/logo', async (req, res) => {
+    try {
+        const { company_id, logo_data } = req.body;
+        if (!company_id) {
+            return res.status(400).json({ success: false, error: "company_id is required" });
+        }
+
+        let savedUrl = logo_data || "";
+        if (logo_data && logo_data.startsWith('data:image')) {
+            try {
+                const uploadsDir = path.join(__dirname, 'static', 'uploads');
+                if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+                const base64Part = logo_data.replace(/^data:image\/\w+;base64,/, '');
+                const extMatch = logo_data.match(/^data:image\/(\w+);base64,/);
+                const ext = extMatch ? extMatch[1] : 'png';
+                const filename = `company_logo_${company_id}.${ext}`;
+                fs.writeFileSync(path.join(uploadsDir, filename), Buffer.from(base64Part, 'base64'));
+                savedUrl = `/static/uploads/${filename}?v=${Date.now()}`;
+            } catch (fsErr) {
+                console.error('[Upload Save Error]', fsErr);
+            }
+        }
+
+        const { body } = await pyPost('/api/company/logo', {
+            company_id,
+            logo_url: savedUrl
+        });
+        res.json({ success: true, logo_url: savedUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 
 app.post('/api/auth/login', async (req, res) => {
     try {

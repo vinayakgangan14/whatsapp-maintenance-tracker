@@ -113,6 +113,10 @@ class DatabaseHandler(BaseHTTPRequestHandler):
                 result = database.check_company_has_admin(company_id=cid or 'default')
                 return self._send_json(result)
 
+            elif path == '/api/company/logo':
+                logo = database.get_company_logo(company_id=cid)
+                return self._send_json({"logo_url": logo})
+
             else:
                 return self._send_json({"error": "Not Found"}, 404)
 
@@ -291,6 +295,18 @@ class DatabaseHandler(BaseHTTPRequestHandler):
             elif path == '/api/supabase/sync-all':
                 result = database.sync_all_to_supabase()
                 return self._send_json(result)
+
+            elif path == '/api/company/logo':
+                logo_val = data.get('logo_url') or data.get('logo_data') or ''
+                company_id = cid or data.get('company_id')
+                if company_id and logo_val:
+                    database.update_company_logo(company_id=company_id, logo_url=logo_val)
+                    return self._send_json({"success": True, "logo_url": logo_val})
+                elif company_id and logo_val == "":
+                    # Clearing logo
+                    database.update_company_logo(company_id=company_id, logo_url="")
+                    return self._send_json({"success": True, "logo_url": ""})
+                return self._send_json({"success": False, "error": "company_id and logo_data are required"}, 400)
 
             else:
                 return self._send_json({"error": "Not Found"}, 404)

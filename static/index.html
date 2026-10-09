@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="theme-color" content="#0a0f1e">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -62,15 +62,16 @@
         <aside class="sidebar">
             <div class="brand">
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
-                    <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
-                        🛠️
+                    <div class="brand-logo-wrapper" id="sidebar-logo-wrapper">
+                        <img id="sidebar-company-logo" src="" alt="Logo" class="company-logo-img" style="display: none;">
+                        <span id="sidebar-logo-placeholder" class="company-logo-placeholder">🛠️</span>
                     </div>
                     <div class="brand-text">
-                        <h2 style="font-size: 1.05rem; margin: 0; font-weight: 700; color: #fff;">Maintenance</h2>
+                        <h2 id="sidebar-company-name" style="font-size: 1.05rem; margin: 0; font-weight: 700; color: #fff;">Maintenance</h2>
                         <span class="badge 247-badge" id="sidebar-role-badge">Operator Mode</span>
                     </div>
                 </div>
-                <button class="mobile-toggle-btn" id="mobile-menu-btn">☰</button>
+                <button class="mobile-toggle-btn" id="mobile-menu-btn" aria-label="Toggle Navigation">☰</button>
             </div>
 
             <nav class="nav-menu">
@@ -110,13 +111,15 @@
         <main class="main-content">
             <!-- Top Navbar -->
             <header class="top-header">
-                <div class="header-title" style="display: flex; align-items: center; gap: 1rem;">
-                    <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-                        ⚙️
+                <div class="header-title" style="display: flex; align-items: center; gap: 0.85rem;">
+                    <div class="header-logo-wrapper" id="header-logo-wrapper">
+                        <img id="header-company-logo" src="" alt="Company Logo" class="company-logo-img" style="display: none;">
+                        <span id="header-logo-placeholder" class="company-logo-placeholder">⚙️</span>
+                        <button id="btn-quick-edit-logo" class="logo-edit-badge" title="Upload Company Logo from Gallery" style="display: none;">📷</button>
                     </div>
-                    <div>
-                        <h1 id="page-title" style="margin: 0; font-size: 1.5rem;">Maintenance Tracking Portal</h1>
-                        <p class="subtitle" style="margin: 0;">Equipment Breakdown & Maintenance Management Suite</p>
+                    <div style="min-width: 0;">
+                        <h1 id="page-title" style="margin: 0; font-size: 1.35rem; line-height: 1.2;">Maintenance Tracking Portal</h1>
+                        <p class="subtitle" id="page-company-subtitle" style="margin: 0; font-size: 0.82rem;">Equipment Breakdown & Maintenance Management Suite</p>
                     </div>
                 </div>
                 <div class="header-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -405,6 +408,39 @@
 
             <!-- TAB 7: SETTINGS & HANDOVER -->
             <section id="tab-settings" class="tab-pane">
+                <!-- COMPANY BRANDING & LOGO PANEL (ADMINISTRATOR ONLY) -->
+                <div class="glass-card" id="card-company-branding" style="margin-bottom: 1.5rem; border-left: 4px solid #38bdf8;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+                        <div>
+                            <h3 style="margin: 0; color: #38bdf8; display: flex; align-items: center; gap: 0.5rem;">
+                                🏢 Company Branding & Logo
+                            </h3>
+                            <p class="text-muted" style="margin: 0.25rem 0 0 0; font-size: 0.88rem;">Upload your plant/company logo from the gallery to customize your portal and reports.</p>
+                        </div>
+                        <span class="badge" id="branding-admin-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Admin Control</span>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1.25rem; flex-wrap: wrap; background: rgba(0,0,0,0.3); padding: 1.25rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
+                        <div style="width: 84px; height: 84px; border-radius: 14px; background: rgba(255,255,255,0.05); border: 2px dashed rgba(56, 189, 248, 0.4); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; position: relative;" id="logo-preview-box">
+                            <img id="settings-logo-preview" src="" alt="Company Logo Preview" style="display: none; width: 100%; height: 100%; object-fit: contain;">
+                            <span id="settings-logo-placeholder" style="font-size: 2.2rem;">🛠️</span>
+                        </div>
+                        <div style="flex: 1; min-width: 220px;">
+                            <div class="logo-actions-group" id="logo-admin-actions" style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+                                <input type="file" id="company-logo-input" accept="image/*" style="display: none;">
+                                <button class="btn" id="btn-upload-logo-gallery" style="background: #0284c7; color: #fff; font-weight: 600; padding: 0.65rem 1.15rem; display: flex; align-items: center; gap: 0.4rem;">
+                                    <span>🖼️ Choose from Gallery</span>
+                                </button>
+                                <button class="btn btn-outline" id="btn-remove-logo" style="border-color: rgba(239, 68, 68, 0.4); color: #f87171; background: rgba(239,68,68,0.1); padding: 0.65rem 1rem;">
+                                    <span>🗑️ Remove Logo</span>
+                                </button>
+                            </div>
+                            <small class="text-muted" style="display: block; font-size: 0.78rem;">Select any photo from your phone's gallery (PNG, JPG, WebP). Optimized automatically for clean mobile display.</small>
+                            <div id="logo-upload-status" style="font-size: 0.82rem; margin-top: 6px; font-weight: 500;"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- USER & ACCESS CONTROL PANEL -->
                 <div class="glass-card" style="margin-bottom: 1.5rem; border-left: 4px solid #10b981;">
                     <h3>👥 User & Access Control Management</h3>
