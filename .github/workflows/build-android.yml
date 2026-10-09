@@ -82,7 +82,7 @@ jobs:
             - **Google Play Store Bundle**: `app-release.aab` (Upload this directly to Google Play Console)
             - **Direct Install APK**: `app-release.apk` (Install directly on Android phones for testing)
             - **Target SDK**: 35 (Android 15)
-            - **Package**: `com.maintenancetracker.app`
+            - **Package**: `com.Maintenancetracker.app`
           files: |
             android/app/build/outputs/bundle/release/app-release.aab
             android/app/build/outputs/apk/release/app-release.apk
